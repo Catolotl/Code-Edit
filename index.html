@@ -18,9 +18,11 @@
     #top{grid-column:1/-1;background:linear-gradient(to bottom,#0f0f0f,#0a0a0a);
       display:flex;gap:10px;align-items:center;padding:0 14px;border-bottom:1px solid #1f1f1f;
       box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+    #filenameWrap{flex:1;display:flex;align-items:center;gap:8px}
     #filename{flex:1;background:#000;border:1px solid #2a2a2a;color:var(--text);
       padding:8px 12px;border-radius:8px;font-size:13px;transition:border 0.2s}
     #filename:focus{border-color:var(--accent);outline:none}
+    #unsavedBadge{font-size:12px;color:var(--warning);display:none}
     
     .dropdown{position:relative;display:inline-block}
     .dropdown-btn{background:var(--accent);border:none;color:white;padding:8px 16px;
@@ -100,16 +102,16 @@
       border-right:1px solid #1a1a1a;font-size:13px;user-select:none;line-height:1.5;
       white-space:pre;overflow:hidden}
     #editor{background:transparent;color:var(--text);border:none;outline:none;
-      resize:none;padding:12px;line-height:1.5;font-size:13px;tab-size:2}
+      resize:none;padding:12px;line-height:1.5;font-size:13px;tab-size:2;white-space:pre}
     
     #diffOverlay{position:absolute;top:0;left:50px;right:0;bottom:0;
       pointer-events:none;padding:12px;line-height:1.5;font-size:13px;white-space:pre;
-      font-family:inherit;overflow:hidden;display:none;z-index:2}
+      font-family:inherit;overflow:auto;display:none;z-index:2}
     #diffOverlay.active{display:block}
     .diff-add{background:rgba(16,185,129,0.12);border-left:3px solid var(--success);padding:6px;margin:4px 0;border-radius:6px}
     .diff-remove{background:rgba(239,68,68,0.12);border-left:3px solid var(--danger);text-decoration:line-through;padding:6px;margin:4px 0;border-radius:6px}
 
-    /* diff controls moved to top-left-ish and adjustable to avoid Indy */
+    /* diff controls dynamically offset to avoid Indy */
     #diffControls{position:absolute;top:10px;right:10px;display:none;gap:8px;z-index:120;
       background:rgba(10,10,10,0.95);padding:8px;border-radius:8px;border:1px solid #2a2a2a;
       box-shadow:0 4px 16px rgba(0,0,0,0.6)}
@@ -119,7 +121,7 @@
     
     #highlightOverlay{position:absolute;top:0;left:50px;right:0;bottom:0;
       pointer-events:none;padding:12px;line-height:1.5;font-size:13px;white-space:pre;
-      font-family:inherit;overflow:hidden;z-index:1}
+      font-family:inherit;overflow:auto;z-index:1}
     .kw{color:#c678dd} /* keywords: purple */
     .str{color:#98c379} /* strings: green */
     .num{color:#d19a66} /* numbers: orange */
@@ -201,13 +203,19 @@
     .suggestion-dropdown{position:absolute;background:#111;border:1px solid #2a2a2a;padding:6px;border-radius:6px;z-index:200;display:none;min-width:160px}
     .suggestion-item{padding:6px 8px;cursor:pointer}
     .suggestion-item:hover{background:#222}
+
+    /* small show-console button */
+    #showConsoleBtn{position:fixed;right:12px;bottom:12px;padding:8px 10px;border-radius:8px;background:var(--accent);color:white;z-index:1000;display:none}
   </style>
 </head>
 <body>
 
 <div id="studio">
   <div id="top">
-    <input id="filename" placeholder="filename.html" style="display:none">
+    <div id="filenameWrap">
+      <input id="filename" placeholder="filename.html" style="display:none">
+      <span id="unsavedBadge">● Unsaved</span>
+    </div>
     <button class="btn secondary" id="backToProjects" style="display:none">← Projects</button>
     <button class="btn secondary" id="newProject">+ New Project</button>
     
@@ -258,7 +266,11 @@
     
     <div class="news-section">
       <h3 style="color:var(--text);margin-bottom:20px;font-size:18px">📰 What's New</h3>
-      <!-- news items omitted for brevity -->
+      <div class="news-item">
+        <h3>✨ Advanced Diff System</h3>
+        <p>AI code suggestions now show a beautiful diff view with red (removed) and green (added) highlighting. Accept or reject changes with one click!</p>
+        <div class="news-date">December 2025</div>
+      </div>
     </div>
   </div>
 
@@ -302,6 +314,7 @@
   </div>
   <div id="consoleLog" style="font-size:12px;color:#ddd;overflow:auto;max-height:180px"></div>
 </div>
+<button id="showConsoleBtn">Show Console</button>
 
 <div id="tutorialOverlay">
   <div class="tutorial-arrow" id="tutorialArrow"></div>
@@ -319,12 +332,14 @@
 <div id="toast" class="toast"></div>
 
 <script>
+  // ELEMENTS
   const filesEl = document.getElementById('files');
   const editor = document.getElementById('editor');
   const lines = document.getElementById('lines');
   const highlightOverlay = document.getElementById('highlightOverlay');
   const diffOverlay = document.getElementById('diffOverlay');
   const filenameEl = document.getElementById('filename');
+  const unsavedBadge = document.getElementById('unsavedBadge');
   const frame = document.getElementById('frame');
   const indyLog = document.getElementById('indyLog');
   const indyInput = document.getElementById('indyInput');
@@ -341,7 +356,6 @@
   const projectList = document.getElementById('projectList');
   const fileSection = document.getElementById('fileSection');
   const indyEl = document.getElementById('indy');
-  const indyHeader = document.getElementById('indyHeader');
   const indyToggle = document.getElementById('indyToggle');
   const indyThinking = document.getElementById('indyThinking');
   const appConsole = document.getElementById('appConsole');
@@ -349,6 +363,7 @@
   const clearConsoleBtn = document.getElementById('clearConsole');
   const closeConsoleBtn = document.getElementById('closeConsole');
   const suggestionDropdown = document.getElementById('suggestionDropdown');
+  const showConsoleBtn = document.getElementById('showConsoleBtn');
 
   // tutorial elements
   const tutorialOverlay = document.getElementById('tutorialOverlay');
@@ -360,7 +375,7 @@
   const tutorialNext = document.getElementById('tutorialNext');
   const tutorialEnd = document.getElementById('tutorialEnd');
 
-  // Load persisted state
+  // STATE
   let projects = JSON.parse(localStorage.getItem('indy-projects') || '{}');
   let currentProject = localStorage.getItem('indy-current-project') || null;
   let currentFile = localStorage.getItem('indy-current-file') || null;
@@ -372,8 +387,47 @@
   let indyHistory = [];
   let pendingCode = null;
   let originalCode = null;
+  let editorDirty = false; // tracks unsaved local edits
 
-  // Apply initial UI state
+  // UTILITIES
+  function persistProjects() {
+    localStorage.setItem('indy-projects', JSON.stringify(projects));
+  }
+
+  function toast(msg, timeout=2000) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    setTimeout(() => toastEl.classList.remove('show'), timeout);
+    logConsole(msg);
+  }
+
+  function logConsole(msg) {
+    const row = document.createElement('div');
+    row.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    consoleLog.appendChild(row);
+    consoleLog.scrollTop = consoleLog.scrollHeight;
+
+    // If console is hidden show the small button so user can reopen
+    if (appConsole.style.display === 'none' || appConsole.style.display === '') {
+      showConsoleBtn.style.display = 'block';
+    } else {
+      appConsole.style.display = 'block';
+      showConsoleBtn.style.display = 'none';
+    }
+  }
+
+  function getExt(name) {
+    const parts = name.split('.');
+    return parts.length > 1 ? parts.pop().toLowerCase() : '';
+  }
+
+  function normalizeName(name) {
+    name = name.trim();
+    if (!name) return 'untitled.txt';
+    return name;
+  }
+
+  // INITIAL UI STATE
   if (previewCollapsed) {
     previewPanel.classList.add('collapsed');
     previewToggle.textContent = '▶';
@@ -391,7 +445,7 @@
     indyEl.classList.remove('collapsed');
   }
 
-  // Dropdown handlers
+  // DROPDOWNS
   document.querySelectorAll('.dropdown-btn').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
@@ -406,33 +460,48 @@
     document.querySelectorAll('.dropdown-content').forEach(d => d.classList.remove('show'));
   });
 
-  function toast(msg, timeout=2000) {
-    toastEl.textContent = msg;
-    toastEl.classList.add('show');
-    setTimeout(() => toastEl.classList.remove('show'), timeout);
-    // also log to console
-    logConsole(msg);
+  // SAVE/UNSAVED HANDLING
+  function setDirty(d) {
+    editorDirty = d;
+    unsavedBadge.style.display = d ? 'inline' : 'none';
   }
 
-  function logConsole(msg) {
-    const row = document.createElement('div');
-    row.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    consoleLog.appendChild(row);
-    consoleLog.scrollTop = consoleLog.scrollHeight;
-    appConsole.style.display = 'block';
+  function save() {
+    if (!currentFile || !currentProject) return;
+    // ensure we don't save when editor is in read-only diff state
+    if (editor.readOnly) return;
+    projects[currentProject].files[currentFile] = editor.value;
+    persistProjects();
+
+    // Persist current open state
+    localStorage.setItem('indy-current-project', currentProject);
+    localStorage.setItem('indy-current-file', currentFile);
+
+    setDirty(false);
+    toast('Saved!');
+    logConsole(`Saved ${currentFile}`);
   }
 
-  function getExt(name) {
-    const parts = name.split('.');
-    return parts.length > 1 ? parts.pop().toLowerCase() : '';
+  // SYNTAX HIGHLIGHT
+  function highlightSyntax(code) {
+    return code
+      .replace(/\b(function|const|let|var|if|else|for|while|return|class|import|export|async|await|try|catch|new|this|typeof|instanceof|def)\b/g, '<span class="kw">$1</span>')
+      .replace(/('([^'\\]|\\.)*'|"([^"\\]|\\.)*"|`([^`\\]|\\.)*`)/g, '<span class="str">$1</span>')
+      .replace(/\b(\d+\.?\d*)\b/g, '<span class="num">$1</span>')
+      .replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#.*$)/gm, '<span class="com">$1</span>')
+      .replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g, '<span class="fn">$1</span>(')
+      .replace(/\b(document|window|console|Math|Array|Object|String|Number|print)\b/g, '<span class="var">$1</span>');
   }
 
-  function normalizeName(name) {
-    name = name.trim();
-    if (!name) return 'untitled.txt';
-    return name.includes('.') ? name : name + '.html';
+  function updateHighlight() {
+    const code = editor.value;
+    const highlighted = highlightSyntax(code.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+    highlightOverlay.innerHTML = highlighted;
+    highlightOverlay.scrollTop = editor.scrollTop;
+    highlightOverlay.scrollLeft = editor.scrollLeft;
   }
 
+  // FILE / PROJECT MANAGEMENT
   function createNewProject() {
     const modal = document.createElement('div');
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999';
@@ -479,7 +548,7 @@
         folders: { 'Root': ['index.html'] }
       };
 
-      localStorage.setItem('indy-projects', JSON.stringify(projects));
+      persistProjects();
       refreshProjects();
       openProject(projectId);
       toast('Project created!');
@@ -492,30 +561,30 @@
     };
   }
 
-function openProject(projectId) {
-  if (currentFile) save(); // save before switching
-  currentProject = projectId;
-  localStorage.setItem('indy-current-project', currentProject);
+  function openProject(projectId) {
+    if (currentFile) save(); // save before switching
+    currentProject = projectId;
+    localStorage.setItem('indy-current-project', currentProject);
 
-  welcomeScreen.classList.remove('active');
-  editorSection.style.display = 'flex';
-  fileSection.style.display = 'block';
+    welcomeScreen.classList.remove('active');
+    editorSection.style.display = 'flex';
+    fileSection.style.display = 'block';
 
-  document.getElementById('backToProjects').style.display = 'inline-block';
-  document.getElementById('fileDropdown').style.display = 'inline-block';
-  document.getElementById('runDropdown').style.display = 'inline-block';
-  document.getElementById('save').style.display = 'inline-block';
-  document.getElementById('pyMaker').style.display = 'inline-block';
-  filenameEl.style.display = 'block';
+    document.getElementById('backToProjects').style.display = 'inline-block';
+    document.getElementById('fileDropdown').style.display = 'inline-block';
+    document.getElementById('runDropdown').style.display = 'inline-block';
+    document.getElementById('save').style.display = 'inline-block';
+    document.getElementById('pyMaker').style.display = 'inline-block';
+    filenameEl.style.display = 'block';
 
-  refreshFiles();
-  refreshProjects();  // ← highlight the active project
+    refreshFiles();
+    refreshProjects();
 
-  const firstFile = projects[projectId].folders['Root'][0];
-  if (firstFile) openFile(firstFile);
-  buildHTML();
-  adjustDiffControls(); // ensure position
-}
+    const firstFile = projects[projectId].folders['Root'][0];
+    if (firstFile) openFile(firstFile);
+    buildHTML();
+    adjustDiffControls();
+  }
 
   function closeProject() {
     if (currentFile) save();
@@ -543,82 +612,50 @@ function openProject(projectId) {
     refreshProjects();
   }
 
-function refreshProjects() {
-  projectList.innerHTML = '';
-  Object.keys(projects).forEach(projectId => {
-    const li = document.createElement('li');
-    li.className = 'project-item';
-    li.textContent = projects[projectId].name;
-    li.onclick = () => openProject(projectId);
+  function refreshProjects() {
+    projectList.innerHTML = '';
+    Object.keys(projects).forEach(projectId => {
+      const li = document.createElement('li');
+      li.className = 'project-item';
+      li.textContent = projects[projectId].name;
+      li.onclick = () => openProject(projectId);
 
-    // HIGHLIGHT THE CURRENTLY OPEN PROJECT
-    li.classList.toggle('active', projectId === currentProject);
+      li.classList.toggle('active', projectId === currentProject);
 
-    const delBtn = document.createElement('span');
-    delBtn.className = 'delete';
-    delBtn.textContent = '×';
-    delBtn.style.opacity = '0';
-    delBtn.onclick = (e) => {
-      e.stopPropagation();
-      const modal = document.createElement('div');
-      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999';
-      modal.innerHTML = `
-        <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:24px;width:400px">
-          <h3 style="margin:0 0 12px;color:var(--text);font-size:18px">Delete Project</h3>
-          <p style="margin:0 0 20px;color:var(--muted);font-size:14px">Are you sure you want to delete <strong style="color:var(--text)">"${projects[projectId].name}"</strong>? All files will be permanently lost.</p>
-          <div style="display:flex;gap:8px;justify-content:flex-end">
-            <button class="btn secondary" id="modalCancel">Cancel</button>
-            <button class="btn danger" id="modalDelete">Delete Project</button>
+      const delBtn = document.createElement('span');
+      delBtn.className = 'delete';
+      delBtn.textContent = '×';
+      delBtn.style.opacity = '0';
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999';
+        modal.innerHTML = `
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:24px;width:400px">
+            <h3 style="margin:0 0 12px;color:var(--text);font-size:18px">Delete Project</h3>
+            <p style="margin:0 0 20px;color:var(--muted);font-size:14px">Are you sure you want to delete <strong style="color:var(--text)">"${projects[projectId].name}"</strong>? All files will be permanently lost.</p>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn secondary" id="modalCancel">Cancel</button>
+              <button class="btn danger" id="modalDelete">Delete Project</button>
+            </div>
           </div>
-        </div>
-      `;
-      document.body.appendChild(modal);
-      modal.querySelector('#modalCancel').onclick = () => modal.remove();
-      modal.querySelector('#modalDelete').onclick = () => {
-        delete projects[projectId];
-        localStorage.setItem('indy-projects', JSON.stringify(projects));
-        if (currentProject === projectId) closeProject();
-        refreshProjects();
-        toast('Project deleted!');
-        modal.remove();
+        `;
+        document.body.appendChild(modal);
+        modal.querySelector('#modalCancel').onclick = () => modal.remove();
+        modal.querySelector('#modalDelete').onclick = () => {
+          delete projects[projectId];
+          persistProjects();
+          if (currentProject === projectId) closeProject();
+          refreshProjects();
+          toast('Project deleted!');
+          modal.remove();
+        };
       };
-    };
-    li.onmouseenter = () => delBtn.style.opacity = '1';
-    li.onmouseleave = () => delBtn.style.opacity = '0';
-    li.appendChild(delBtn);
-    projectList.appendChild(li);
-  });
-}
-
-  function save() {
-    if (!currentFile || !currentProject) return;
-    projects[currentProject].files[currentFile] = editor.value;
-    localStorage.setItem('indy-projects', JSON.stringify(projects));
-
-    // Persist current open state
-    localStorage.setItem('indy-current-project', currentProject);
-    localStorage.setItem('indy-current-file', currentFile);
-
-    toast('Saved!');
-    logConsole(`Saved ${currentFile}`);
-  }
-
-  function highlightSyntax(code) {
-    return code
-      .replace(/\b(function|const|let|var|if|else|for|while|return|class|import|export|async|await|try|catch|new|this|typeof|instanceof|def)\b/g, '<span class="kw">$1</span>')
-      .replace(/('([^'\\]|\\.)*'|"([^"\\]|\\.)*"|`([^`\\]|\\.)*`)/g, '<span class="str">$1</span>')
-      .replace(/\b(\d+\.?\d*)\b/g, '<span class="num">$1</span>')
-      .replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#.*$)/gm, '<span class="com">$1</span>')
-      .replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g, '<span class="fn">$1</span>(')
-      .replace(/\b(document|window|console|Math|Array|Object|String|Number|print)\b/g, '<span class="var">$1</span>');
-  }
-
-  function updateHighlight() {
-    const code = editor.value;
-    const highlighted = highlightSyntax(code.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-    highlightOverlay.innerHTML = highlighted;
-    highlightOverlay.scrollTop = editor.scrollTop;
-    highlightOverlay.scrollLeft = editor.scrollLeft;
+      li.onmouseenter = () => delBtn.style.opacity = '1';
+      li.onmouseleave = () => delBtn.style.opacity = '0';
+      li.appendChild(delBtn);
+      projectList.appendChild(li);
+    });
   }
 
   function openFile(name) {
@@ -628,6 +665,7 @@ function refreshProjects() {
 
     filenameEl.value = name;
     editor.value = projects[currentProject].files[name] || '';
+    setDirty(false);
     editor.focus();
     document.querySelectorAll('.file-item').forEach(li =>
       li.classList.toggle('active', li.dataset.name === name)
@@ -705,7 +743,7 @@ function refreshProjects() {
           modal.querySelector('#modalDelete').onclick = () => {
             delete projects[currentProject].files[fileName];
             folders[folderName] = folders[folderName].filter(f => f !== fileName);
-            localStorage.setItem('indy-projects', JSON.stringify(projects));
+            persistProjects();
             if (currentFile === fileName) {
               currentFile = null;
               editor.value = '';
@@ -739,7 +777,7 @@ function refreshProjects() {
         if (oldFolder && oldFolder !== folderName) {
           folders[oldFolder] = folders[oldFolder].filter(f => f !== fileName);
           folders[folderName].push(fileName);
-          localStorage.setItem('indy-projects', JSON.stringify(projects));
+          persistProjects();
           refreshFiles();
           toast(`Moved to ${folderName}!`);
         }
@@ -751,6 +789,7 @@ function refreshProjects() {
     });
   }
 
+  // DIFF UI
   function showDiff(newCode) {
     originalCode = editor.value;
     pendingCode = newCode;
@@ -767,15 +806,15 @@ function refreshProjects() {
 
       if (oldLine !== newLine) {
         if (oldLine && !newLine) {
-          diffHTML += `<div class="diff-remove">${oldLine || ' '}</div>`;
+          diffHTML += `<div class="diff-remove">${escapeHtml(oldLine) || '&nbsp;'}</div>`;
         } else if (!oldLine && newLine) {
-          diffHTML += `<div class="diff-add">${newLine}</div>`;
+          diffHTML += `<div class="diff-add">${escapeHtml(newLine)}</div>`;
         } else {
-          if (oldLine) diffHTML += `<div class="diff-remove">${oldLine}</div>`;
-          if (newLine) diffHTML += `<div class="diff-add">${newLine}</div>`;
+          if (oldLine) diffHTML += `<div class="diff-remove">${escapeHtml(oldLine)}</div>`;
+          if (newLine) diffHTML += `<div class="diff-add">${escapeHtml(newLine)}</div>`;
         }
       } else {
-        diffHTML += `<div>${oldLine}</div>`;
+        diffHTML += `<div>${escapeHtml(oldLine)}</div>`;
       }
     }
 
@@ -805,32 +844,34 @@ function refreshProjects() {
     diffOverlay.classList.remove('active');
     diffControls.classList.remove('active');
     editorWrap.classList.remove('pending');
+    setDirty(false);
     toast('Changes rejected');
   }
 
-  // When Indy is open it can overlap diff controls — adjust dynamically
   function adjustDiffControls() {
-    // default right offset
     const indyOpen = !indyEl.classList.contains('collapsed');
     const indyWidth = indyOpen ? indyEl.getBoundingClientRect().width : 0;
-    const rightOffset = indyOpen ? (indyWidth + 20) : 10; // leave some padding
+    const previewOpen = !previewPanel.classList.contains('collapsed');
+    const previewWidth = previewOpen ? previewPanel.getBoundingClientRect().width : 0;
+    // place diffControls so they're not under Indy or Preview
+    const minRight = Math.max(indyWidth, previewWidth);
+    const rightOffset = minRight ? (minRight + 20) : 10;
     diffControls.style.right = rightOffset + 'px';
-    // ensure it's on top
     diffControls.style.zIndex = 120;
   }
 
   window.addEventListener('resize', adjustDiffControls);
   const observer = new MutationObserver(adjustDiffControls);
   observer.observe(indyEl, { attributes: true, attributeFilter: ['class'] });
+  observer.observe(previewPanel, { attributes: true, attributeFilter: ['class'] });
 
+  // PREVIEW / RUN
   function buildHTML(runFromUser=true) {
     if (!currentProject) return;
     previewError.style.display = 'none';
 
     // require save before manual Run Now
-    const currentSaved = projects[currentProject].files[currentFile] === editor.value;
-    if (runFromUser && !currentSaved) {
-      // show a modal asking to save first
+    if (runFromUser && editorDirty) {
       const modal = document.createElement('div');
       modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999';
       modal.innerHTML = `
@@ -848,7 +889,7 @@ function refreshProjects() {
       modal.querySelector('#saveRun').onclick = () => {
         save();
         modal.remove();
-        buildHTML(false); // now run (non-user-initiated path)
+        buildHTML(false);
       };
       return;
     }
@@ -888,10 +929,11 @@ function refreshProjects() {
     }
   }
 
-  // Editor input handling with auto-save and auto-run
+  // EDITOR EVENTS, AUTOSAVE, AUTORUN
   editor.oninput = () => {
     updateLines();
     updateHighlight();
+    setDirty(true);
 
     // Auto-save after 1 second of no typing
     clearTimeout(editor.autoSaveTimer);
@@ -902,25 +944,37 @@ function refreshProjects() {
     }, 1000);
 
     if (autoRunCheck.checked) {
-      // Auto-run will save current contents then run (complies with "save before run")
       clearTimeout(editor.autoRunTimer);
       editor.autoRunTimer = setTimeout(() => {
-        // persist current buffer directly to project so preview uses it
         if (currentFile && currentProject) {
+          // commit the buffer so preview matches
           projects[currentProject].files[currentFile] = editor.value;
-          localStorage.setItem('indy-projects', JSON.stringify(projects));
+          persistProjects();
         }
         buildHTML(false);
       }, 800);
     }
 
-    // Autocomplete suggestions
     if (autoSuggestCheck.checked) {
       handleAutocomplete();
     } else {
       hideSuggestionDropdown();
     }
   };
+
+  // Save on blur and beforeunload to avoid accidental data loss
+  editor.addEventListener('blur', () => {
+    if (currentFile && currentProject && editorDirty) save();
+  });
+
+  window.addEventListener('beforeunload', (e) => {
+    if (currentFile && currentProject && editorDirty) {
+      save(); // localStorage.setItem is synchronous
+      // optionally prompt the user:
+      // e.preventDefault();
+      // e.returnValue = '';
+    }
+  });
 
   editor.onscroll = () => {
     lines.scrollTop = editor.scrollTop;
@@ -938,7 +992,7 @@ function refreshProjects() {
     if (e.key === 'Tab' && suggestionDropdown.style.display === 'block') {
       e.preventDefault();
       const first = suggestionDropdown.querySelector('.suggestion-item');
-      if (first) applySuggestion(first.textContent);
+      if (first) applySuggestion(first.dataset.insert || first.textContent);
       hideSuggestionDropdown();
       return;
     }
@@ -948,12 +1002,11 @@ function refreshProjects() {
   document.getElementById('newProject').onclick = createNewProject;
   document.getElementById('backToProjects').onclick = closeProject;
 
-  // New file flow (supports html, css, js, py)
   document.getElementById('newFile').onclick = () => {
     const modal = document.createElement('div');
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999';
     modal.innerHTML = `
-      <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:20px;width:420px">
+      <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:20px;width:440px">
         <h3 style="margin:0 0 12px;color:var(--text)">Create New File</h3>
         <input id="newFilename" type="text" placeholder="filename (e.g. script.js or main.py)"
           style="width:100%;background:#0a0a0a;border:1px solid #2a2a2a;color:var(--text);padding:10px;border-radius:6px;font-size:14px;margin-bottom:12px;outline:none">
@@ -994,9 +1047,8 @@ function refreshProjects() {
           content = `# ${name}\ndef main():\n    print('Hello from ${name}')\n\nif __name__ == '__main__':\n    main()`;
         }
         projects[currentProject].files[name] = content;
-        // add to Root
         projects[currentProject].folders['Root'].push(name);
-        localStorage.setItem('indy-projects', JSON.stringify(projects));
+        persistProjects();
         refreshFiles();
         openFile(name);
         toast('File created');
@@ -1010,7 +1062,6 @@ function refreshProjects() {
   // Quick python maker
   document.getElementById('makePy').onclick = () => {
     document.getElementById('newFile').click();
-    // preselect py after a short delay when modal is created
     setTimeout(() => {
       const sel = document.querySelector('#fileType');
       if (sel) sel.value = 'py';
@@ -1023,7 +1074,7 @@ function refreshProjects() {
     const name = prompt('Folder name', 'New Folder');
     if (!name) return;
     projects[currentProject].folders[name] = [];
-    localStorage.setItem('indy-projects', JSON.stringify(projects));
+    persistProjects();
     refreshFiles();
     toast('Folder created');
   };
@@ -1034,9 +1085,13 @@ function refreshProjects() {
 
   document.getElementById('rename').onclick = () => {
     if (!currentFile) return toast('No file selected');
-    const newName = prompt('Rename file to', currentFile);
+    const newName = prompt('Rename file to (include extension if you want)', currentFile);
     if (!newName) return;
     const normalized = normalizeName(newName);
+    if (normalized === currentFile) return toast('No change');
+    if (projects[currentProject].files[normalized]) {
+      if (!confirm(`${normalized} already exists. Overwrite?`)) return toast('Rename cancelled');
+    }
     projects[currentProject].files[normalized] = projects[currentProject].files[currentFile];
     // replace in folders
     Object.keys(projects[currentProject].folders).forEach(f => {
@@ -1044,7 +1099,7 @@ function refreshProjects() {
     });
     delete projects[currentProject].files[currentFile];
     currentFile = normalized;
-    localStorage.setItem('indy-projects', JSON.stringify(projects));
+    persistProjects();
     refreshFiles();
     openFile(normalized);
     toast('Renamed');
@@ -1058,7 +1113,7 @@ function refreshProjects() {
       projects[currentProject].folders[f] = projects[currentProject].folders[f].filter(x => x !== currentFile);
     });
     currentFile = null;
-    localStorage.setItem('indy-projects', JSON.stringify(projects));
+    persistProjects();
     refreshFiles();
     openProject(currentProject);
     toast('Deleted file');
@@ -1075,6 +1130,7 @@ function refreshProjects() {
     const collapsed = previewPanel.classList.contains('collapsed');
     previewToggle.textContent = collapsed ? '▶' : '◀';
     localStorage.setItem('indy-preview-collapsed', JSON.stringify(collapsed));
+    adjustDiffControls();
   };
   document.getElementById('togglePreview').onclick = togglePreviewHandler;
   previewToggle.onclick = togglePreviewHandler;
@@ -1100,16 +1156,23 @@ function refreshProjects() {
     adjustDiffControls();
   });
 
-  // show/hide console
-  closeConsoleBtn.onclick = () => { appConsole.style.display = 'none'; };
+  // Console hide/show behavior
+  closeConsoleBtn.onclick = () => {
+    appConsole.style.display = 'none';
+    showConsoleBtn.style.display = 'block';
+  };
   clearConsoleBtn.onclick = () => { consoleLog.innerHTML = ''; };
+  showConsoleBtn.onclick = () => {
+    appConsole.style.display = 'block';
+    showConsoleBtn.style.display = 'none';
+  };
 
   // Indy thinking indicator
   function setIndyThinking(on) {
     indyThinking.style.display = on ? 'inline-block' : 'none';
   }
 
-  // Indy AI chat
+  // INDY AI CHAT (demo fetch)
   indyInput.addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter' || !e.target.value.trim()) return;
 
@@ -1140,7 +1203,7 @@ Answer:`;
     try {
       setIndyThinking(true);
       logConsole('Asking Indy...');
-      // demo fetch - this endpoint in the original file is a simple echo; keep but it's just a placeholder
+      // Demo/placeholder endpoint; in real app replace with actual LLM endpoint
       const res = await fetch(`https://text.pollinations.ai/${encodeURIComponent(context)}`);
       const answer = await res.text();
 
@@ -1183,16 +1246,16 @@ Answer:`;
       errMsg.className = 'msg';
       errMsg.innerHTML = `<b>Error:</b> Could not reach Indy.`;
       indyLog.appendChild(errMsg);
-      logConsole('Indy error: ' + err.message);
+      logConsole('Indy error: ' + (err.message || 'unknown'));
     }
   });
 
-  // Helper escape for innerHTML insertion
+  // Escape helper
   function escapeHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  // Autocomplete: very small demo set of suggestions
+  // AUTOCOMPLETE (simple demo)
   const SUGGESTIONS = [
     {match: 'func', insert: 'function ', label: 'function — JS'},
     {match: 'def', insert: 'def ', label: 'def — PY'},
@@ -1213,15 +1276,13 @@ Answer:`;
     const matches = SUGGESTIONS.filter(s => s.match.startsWith(word));
     if (matches.length === 0) return hideSuggestionDropdown();
 
-    // compute editor caret position for dropdown placement (simple approximation)
+    // approximate caret position
     const rect = editor.getBoundingClientRect();
-    // naive row/col calc
     const linesBefore = editor.value.slice(0, editor.selectionStart).split('\n');
     const row = linesBefore.length;
     const col = linesBefore[linesBefore.length - 1].length;
-    // compute position
-    const lineHeight = 18;
-    const top = rect.top + (row - 1) * lineHeight - editor.scrollTop + 52; // account for top bar
+    const lineHeight = parseInt(window.getComputedStyle(editor).lineHeight) || 18;
+    const top = rect.top + (row - 1) * lineHeight - editor.scrollTop + 52; // account for top bar height
     const left = rect.left + col * 7 + 50; // approximate char width + gutter offset
 
     suggestionDropdown.innerHTML = '';
@@ -1229,20 +1290,21 @@ Answer:`;
       const div = document.createElement('div');
       div.className = 'suggestion-item';
       div.textContent = m.insert;
+      div.dataset.insert = m.insert;
       div.title = m.label;
       div.onclick = () => { applySuggestion(m.insert); hideSuggestionDropdown(); };
       suggestionDropdown.appendChild(div);
     });
 
-    suggestionDropdown.style.top = (top) + 'px';
-    suggestionDropdown.style.left = (left) + 'px';
+    // clamp position to viewport
+    suggestionDropdown.style.top = Math.min(window.innerHeight - 60, Math.max(60, top)) + 'px';
+    suggestionDropdown.style.left = Math.min(window.innerWidth - 200, Math.max(20, left)) + 'px';
     suggestionDropdown.style.display = 'block';
   }
 
   function applySuggestion(text) {
     const start = editor.selectionStart;
     const before = editor.value.slice(0, start);
-    // remove current token
     const m = before.match(/([a-zA-Z0-9_$]+)$/);
     const tokenStart = m ? start - m[1].length : start;
     editor.value = editor.value.slice(0, tokenStart) + text + editor.value.slice(editor.selectionEnd);
@@ -1250,13 +1312,14 @@ Answer:`;
     updateLines();
     updateHighlight();
     editor.focus();
+    setDirty(true);
   }
 
   function hideSuggestionDropdown() {
     suggestionDropdown.style.display = 'none';
   }
 
-  // Tutorial steps
+  // TUTORIAL (basic)
   const tutorialSteps = [
     {
       title: 'Welcome',
@@ -1269,9 +1332,8 @@ Answer:`;
       arrow: () => {
         const t = document.getElementById('indyToggle');
         const r = t.getBoundingClientRect();
-        return { top: r.top + 'px', left: (r.left - 200) + 'px', rotate: 0 };
-      },
-      highlight: '#indyToggle'
+        return { top: (r.top - 40) + 'px', left: (r.left - 220) + 'px' };
+      }
     },
     {
       title: 'Save before Run',
@@ -1279,9 +1341,8 @@ Answer:`;
       arrow: () => {
         const t = document.getElementById('save');
         const r = t.getBoundingClientRect();
-        return { top: (r.top + 40) + 'px', left: (r.left - 20) + 'px', rotate: 0 };
-      },
-      highlight: '#save'
+        return { top: (r.top + 8) + 'px', left: (r.left - 220) + 'px' };
+      }
     },
     {
       title: 'Auto Suggestions',
@@ -1301,7 +1362,6 @@ Answer:`;
     const s = tutorialSteps[tutorialIndex];
     tutorialTitle.textContent = s.title;
     tutorialText.textContent = s.text;
-    // position arrow if provided
     if (s.arrow) {
       const pos = s.arrow();
       tutorialArrow.style.display = 'block';
@@ -1310,50 +1370,53 @@ Answer:`;
     } else {
       tutorialArrow.style.display = 'none';
     }
-    // position panel to center-left by default
-    tutorialStep.style.marginTop = '80px';
   }
 
   tutorialPrev.onclick = () => { tutorialIndex = Math.max(0, tutorialIndex - 1); renderTutorialStep(); };
   tutorialNext.onclick = () => { tutorialIndex = Math.min(tutorialSteps.length - 1, tutorialIndex + 1); renderTutorialStep(); };
   tutorialEnd.onclick = () => { tutorialOverlay.classList.remove('active'); localStorage.setItem('indy-tutorial-shown', 'true'); };
-
   document.getElementById('showTutorial').onclick = () => showTutorial(0);
 
-  // small helper to run tutorial on first launch
   if (!localStorage.getItem('indy-tutorial-shown')) {
-    // show tutorial after short delay
     setTimeout(() => showTutorial(0), 800);
   }
 
-  // Persist and restore differences panel position on Indy toggle
-  // already handled by MutationObserver
-
-  // simple console events: listen to messages from iframe (if any)
+  // FRAME messages -> console
   window.addEventListener('message', (ev) => {
-    // in a real app you'd validate origin; here we'll just log
     logConsole('Frame: ' + (typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data)));
   });
 
-  // Quick handlers
+  // helpers
   document.getElementById('pyMaker').onclick = () => document.getElementById('makePy').click();
 
-  // Initialize
+  // INITIALIZE UI / RESTORE
+  function ensureDefaultProject() {
+    if (Object.keys(projects).length === 0) {
+      const projectId = 'proj_' + Date.now();
+      projects[projectId] = {
+        name: 'Welcome Project',
+        files: {
+          'index.html': `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Welcome</title></head><body><h1>Welcome</h1><p>Start coding!</p></body></html>`
+        },
+        folders: { 'Root': ['index.html'] }
+      };
+      persistProjects();
+      currentProject = projectId;
+      localStorage.setItem('indy-current-project', currentProject);
+    }
+  }
+
+  ensureDefaultProject();
   refreshProjects();
 
-  // Restore last open project/file if it exists
   if (currentProject && projects[currentProject]) {
-    // Hide welcome screen immediately
     welcomeScreen.classList.remove('active');
-    
-    // Then open the project (which will show editor, files, etc.)
     openProject(currentProject);
-    
     if (currentFile && projects[currentProject].files[currentFile]) {
       openFile(currentFile);
     }
   } else {
-    // No saved project → ensure welcome screen is visible
     welcomeScreen.classList.add('active');
   }
 </script>
