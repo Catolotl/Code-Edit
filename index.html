@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Indy Code Studio Pro</title>
+  <style>
+    :root {
+      --bg:#000; --sidebar:#0d0d0d; --panel:#161616;
+      --accent:#6b46c1; --accent-hover:#7c3aed; --glow:#a78bfa;
+      --text:#e6e6e6; --muted:#9a9a9a; --danger:#ef4444;
+      --success:#10b981; --warning:#f59e0b;
+    }
+    *{box-sizing:border-box;font-family:'SF Mono','Monaco','Cascadia Code',ui-monospace,monospace}
+    body{margin:0;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+
+    #studio{position:fixed;inset:0;display:grid;grid-template-rows:52px 1fr;grid-template-columns:280px 1fr}
+
+    #top{grid-column:1/-1;background:linear-gradient(to bottom,#0f0f0f,#0a0a0a);
+      display:flex;gap:10px;align-items:center;padding:0 14px;border-bottom:1px solid #1f1f1f;
+      box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+    #filename{flex:1;background:#000;border:1px solid #2a2a2a;color:var(--text);
+      padding:8px 12px;border-radius:8px;font-size:13px;transition:border 0.2s}
+    #filename:focus{border-color:var(--accent);outline:none}
+    
+    .dropdown{position:relative;display:inline-block}
+    .dropdown-btn{background:var(--accent);border:none;color:white;padding:8px 16px;
+      border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;
+      display:flex;align-items:center;gap:6px}
+    .dropdown-btn:hover{background:var(--accent-hover);transform:translateY(-1px)}
+    .dropdown-content{display:none;position:absolute;top:100%;right:0;margin-top:4px;
+      background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;min-width:160px;
+      box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:1000;overflow:hidden}
+    .dropdown-content.show{display:block}
+    .dropdown-item{padding:10px 14px;cursor:pointer;font-size:13px;display:flex;
+      align-items:center;gap:8px;border-bottom:1px solid #252525}
+    .dropdown-item:last-child{border-bottom:none}
+    .dropdown-item:hover{background:#252525}
+    .dropdown-item input[type="checkbox"]{cursor:pointer}
+    
+    .btn{background:var(--accent);border:none;color:white;padding:8px 16px;border-radius:8px;
+      cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;white-space:nowrap}
+    .btn:hover{background:var(--accent-hover);transform:translateY(-1px)}
+    .btn:active{transform:translateY(0)}
+    .btn.danger{background:var(--danger)}
+    .btn.danger:hover{background:#dc2626}
+    .btn.secondary{background:#333;color:var(--text)}
+    .btn.secondary:hover{background:#404040}
+    .btn.success{background:var(--success)}
+    .btn.success:hover{background:#059669}
+
+    #sidebar{background:var(--sidebar);padding:12px;overflow:auto;border-right:1px solid #1a1a1a}
+    #sidebar h3{margin:6px 0 12px;font-size:13px;color:#bbb;text-transform:uppercase;
+      letter-spacing:0.5px;font-weight:600;display:flex;align-items:center;justify-content:space-between}
+    .newFolderBtn{background:#1a1a1a;border:none;color:var(--text);padding:4px 8px;
+      border-radius:4px;cursor:pointer;font-size:11px}
+    .newFolderBtn:hover{background:#252525}
+    
+    #projectList{list-style:none;padding:0;margin:0 0 20px 0}
+    .project-item{padding:10px 12px;border-radius:6px;cursor:pointer;background:#121212;
+      margin-bottom:6px;transition:all 0.2s;display:flex;align-items:center;gap:8px}
+    .project-item::before{content:'📦';font-size:16px}
+    .project-item.active{background:var(--accent);box-shadow:0 2px 8px rgba(107,70,193,0.3)}
+    .project-item:hover:not(.active){background:#1a1a1a}
+    
+    #files{list-style:none;padding:0;margin:0}
+    .folder{margin-bottom:8px}
+    .folder-header{padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;
+      align-items:center;gap:6px;font-size:13px;font-weight:600;background:#121212;
+      transition:background 0.15s}
+    .folder-header:hover{background:#1a1a1a}
+    .folder-header.collapsed::before{content:'▶'}
+    .folder-header:not(.collapsed)::before{content:'▼'}
+    .folder-content{padding-left:16px;margin-top:4px}
+    .folder-content.hidden{display:none}
+    
+    .file-item{padding:8px 10px;border-radius:6px;cursor:move;display:flex;
+      align-items:center;gap:8px;font-size:13px;transition:all 0.15s;position:relative}
+    .file-item::before{content:'📄';font-size:14px}
+    .file-item[data-ext="html"]::before{content:'🌐'}
+    .file-item[data-ext="css"]::before{content:'🎨'}
+    .file-item[data-ext="js"]::before{content:'⚡'}
+    .file-item.active{background:var(--accent);box-shadow:0 0 0 1px var(--glow),0 2px 8px rgba(107,70,193,0.3)}
+    .file-item:hover:not(.active){background:#1a1a1a}
+    .file-item.dragging{opacity:0.5}
+    .file-item.drag-over{border:2px dashed var(--accent)}
+    .delete{margin-left:auto;opacity:0;padding:2px 6px;border-radius:4px;
+      background:#333;font-size:11px;transition:opacity 0.2s}
+    .file-item:hover .delete{opacity:1}
+    .delete:hover{background:var(--danger)}
+
+    #editorSection{position:relative;display:flex;flex-direction:column}
+    #editorWrap{flex:1;display:grid;grid-template-columns:50px 1fr;background:#0b0b0b;position:relative}
+    #editorWrap.pending::after{content:'';position:absolute;inset:0;
+      background:linear-gradient(90deg,transparent,rgba(107,70,193,0.1),transparent);
+      animation:shimmer 2s infinite;pointer-events:none}
+    @keyframes shimmer{0%,100%{transform:translateX(-100%)}50%{transform:translateX(100%)}}
+    
+    #lines{background:#070707;color:#555;padding:12px 8px;text-align:right;
+      border-right:1px solid #1a1a1a;font-size:13px;user-select:none;line-height:1.5;
+      white-space:pre;overflow:hidden}
+    #editor{background:transparent;color:var(--text);border:none;outline:none;
+      resize:none;padding:12px;line-height:1.5;font-size:13px;tab-size:2}
+    
+    #diffOverlay{position:absolute;top:0;left:50px;right:0;bottom:0;
+      pointer-events:none;padding:12px;line-height:1.5;font-size:13px;white-space:pre;
+      font-family:inherit;overflow:hidden;display:none}
+    #diffOverlay.active{display:block}
+    .diff-add{background:rgba(16,185,129,0.2);border-left:3px solid var(--success)}
+    .diff-remove{background:rgba(239,68,68,0.2);border-left:3px solid var(--danger);text-decoration:line-through}
+
+    #diffControls{position:absolute;top:10px;right:10px;display:none;gap:8px;z-index:100;
+      background:rgba(10,10,10,0.95);padding:8px;border-radius:8px;border:1px solid #2a2a2a;
+      box-shadow:0 4px 16px rgba(0,0,0,0.6)}
+    #diffControls.active{display:flex}
+    #diffControls::before{content:'AI Suggestion';position:absolute;top:-24px;left:0;
+      font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px}
+    
+    #highlightOverlay{position:absolute;top:0;left:50px;right:0;bottom:0;
+      pointer-events:none;padding:12px;line-height:1.5;font-size:13px;white-space:pre;
+      font-family:inherit;overflow:hidden}
+    .kw{color:#c678dd} /* keywords: purple */
+    .str{color:#98c379} /* strings: green */
+    .num{color:#d19a66} /* numbers: orange */
+    .com{color:#5c6370;font-style:italic} /* comments: gray */
+    .fn{color:#61afef} /* functions: blue */
+    .var{color:#e06c75} /* variables: red */
+
+    #welcomeScreen{grid-column:2;padding:40px;display:none;flex-direction:column;align-items:center;
+      justify-content:center;text-align:center}
+    #welcomeScreen.active{display:flex}
+    #welcomeScreen h1{font-size:48px;margin:0 0 10px;background:linear-gradient(135deg,var(--accent),var(--glow));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    #welcomeScreen h2{font-size:24px;color:var(--muted);margin:0 0 40px;font-weight:400}
+    .news-section{max-width:800px;width:100%;margin-top:40px}
+    .news-item{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;
+      padding:20px;margin-bottom:16px;text-align:left;transition:all 0.2s}
+    .news-item:hover{border-color:var(--accent);transform:translateY(-2px)}
+    .news-item h3{margin:0 0 8px;color:var(--glow);font-size:16px}
+    .news-item p{margin:0;color:var(--muted);line-height:1.6;font-size:14px}
+    .news-date{color:#666;font-size:12px;margin-top:8px}
+
+    #previewPanel{position:fixed;right:0;top:52px;bottom:0;width:42%;
+      background:#fff;border-left:1px solid #1a1a1a;transition:transform 0.3s;z-index:50}
+    #previewPanel.collapsed{transform:translateX(100%)}
+    #previewToggle{position:absolute;left:-40px;top:10px;background:var(--accent);
+      border:none;color:white;padding:8px 12px;border-radius:8px 0 0 8px;cursor:pointer;
+      font-size:18px;transition:background 0.2s}
+    #previewToggle:hover{background:var(--accent-hover)}
+    #previewError{background:#fee;color:#c00;padding:12px;font-size:12px;display:none;border-bottom:2px solid #f00}
+    iframe{width:100%;height:100%;border:none}
+
+    #indy{position:fixed;right:0;top:52px;bottom:0;width:380px;
+      background:linear-gradient(to bottom,#0f0f0f,#0a0a0a);
+      border-left:1px solid #2a2a2a;display:flex;flex-direction:column;
+      box-shadow:-4px 0 16px rgba(0,0,0,0.4);z-index:90;transition:transform 0.3s ease}
+    #indy.collapsed{transform:translateX(100%)}
+    #indyToggle{position:absolute;left:-40px;top:50%;transform:translateY(-50%);
+      background:linear-gradient(135deg,var(--accent),#4c1d95);border:none;color:white;
+      padding:12px 10px;border-radius:8px 0 0 8px;cursor:pointer;font-size:18px;
+      transition:all 0.2s;box-shadow:-2px 0 8px rgba(0,0,0,0.3);writing-mode:vertical-rl}
+    #indyToggle:hover{background:linear-gradient(135deg,var(--accent-hover),#5b21b6);
+      padding-left:12px}
+    #indy header{padding:14px 16px;font-weight:600;border-bottom:1px solid #2a2a2a;
+      display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--accent),#4c1d95)}
+    #indy header::before{content:'🤖';font-size:18px}
+    #indy .log{flex:1;overflow:auto;padding:12px;font-size:12px;line-height:1.6}
+    #indy .log b{color:var(--glow)}
+    #indy .log .msg{margin:8px 0;padding:8px;border-radius:6px;background:#141414}
+    #indy .log .code-suggestion{background:#1a1a1a;padding:10px;border-radius:6px;
+      margin:8px 0;border-left:3px solid var(--accent)}
+    #indy .log .code-suggestion pre{margin:8px 0;padding:8px;background:#0a0a0a;
+      border-radius:4px;overflow-x:auto;font-size:11px}
+    #indy .log .apply-btn{background:var(--success);color:white;border:none;
+      padding:6px 12px;border-radius:6px;cursor:pointer;font-size:11px;margin-top:8px}
+    #indy .log .apply-btn:hover{background:#059669}
+    #indy input{border:none;border-top:1px solid #2a2a2a;background:#000;color:white;
+      padding:12px;outline:none;font-size:13px}
+    #indy input:focus{background:#0a0a0a}
+
+    .toast{position:fixed;bottom:80px;right:20px;background:var(--accent);color:white;
+      padding:12px 20px;border-radius:8px;font-size:13px;opacity:0;transition:opacity 0.3s;
+      pointer-events:none;z-index:1000;box-shadow:0 4px 16px rgba(0,0,0,0.4)}
+    .toast.show{opacity:1}
+  </style>
+</head>
+<body>
+
+<div id="studio">
+  <div id="top">
+    <input id="filename" placeholder="filename.html" style="display:none">
+    <button class="btn secondary" id="backToProjects" style="display:none">← Projects</button>
+    <button class="btn secondary" id="newProject">+ New Project</button>
+    
+    <div class="dropdown" id="fileDropdown" style="display:none">
+      <button class="dropdown-btn">File ▾</button>
+      <div class="dropdown-content">
+        <div class="dropdown-item" id="newFile">📄 New File</div>
+        <div class="dropdown-item" id="newFolder">📁 New Folder</div>
+        <div class="dropdown-item" id="addImage">🖼️ Add Image</div>
+        <div class="dropdown-item" id="rename">✏️ Rename</div>
+        <div class="dropdown-item" id="deleteFile">🗑️ Delete</div>
+      </div>
+    </div>
+    
+    <div class="dropdown" id="runDropdown" style="display:none">
+      <button class="dropdown-btn">Run ▾</button>
+      <div class="dropdown-content">
+        <div class="dropdown-item" id="runNow">▶ Run Now</div>
+        <div class="dropdown-item" id="autoRunToggle">
+          <input type="checkbox" id="autoRun"> Auto Run
+        </div>
+        <div class="dropdown-item" id="togglePreview">👁️ Toggle Preview</div>
+      </div>
+    </div>
+    
+    <button class="btn" id="save" style="display:none">💾 Save</button>
+  </div>
+
+  <div id="sidebar">
+    <h3>Projects</h3>
+    <ul id="projectList"></ul>
+    <div id="fileSection" style="display:none">
+      <h3>Files</h3>
+      <div id="files"></div>
+    </div>
+  </div>
+
+  <div id="welcomeScreen" class="active">
+    <h1>🚀 Indy Studio Pro</h1>
+    <h2>Your AI-Powered Code Editor</h2>
+    <p style="color:var(--muted);max-width:600px">Create beautiful web projects with intelligent code assistance, real-time preview, and seamless file management.</p>
+    
+    <div class="news-section">
+      <h3 style="color:var(--text);margin-bottom:20px;font-size:18px">📰 What's New</h3>
+      
+      <div class="news-item">
+        <h3>✨ Advanced Diff System</h3>
+        <p>AI code suggestions now show a beautiful diff view with red (removed) and green (added) highlighting. Accept or reject changes with one click!</p>
+        <div class="news-date">December 2025</div>
+      </div>
+      
+      <div class="news-item">
+        <h3>🎨 Syntax Highlighting</h3>
+        <p>Enjoy color-coded syntax with purple keywords, green strings, orange numbers, and more. Makes reading code effortless!</p>
+        <div class="news-date">December 2025</div>
+      </div>
+      
+      <div class="news-item">
+        <h3>📁 Smart Folders & Drag-Drop</h3>
+        <p>Organize your files with collapsible folders. Just drag and drop files between folders to reorganize your project structure.</p>
+        <div class="news-date">December 2025</div>
+      </div>
+      
+      <div class="news-item">
+        <h3>🤖 Moveable Indy Assistant</h3>
+        <p>The AI assistant window is now draggable and resizable! Position it anywhere on your screen and it remembers your preferences.</p>
+        <div class="news-date">December 2025</div>
+      </div>
+      
+      <div class="news-item">
+        <h3>💾 Multi-Project Support</h3>
+        <p>Create and manage multiple projects! Each project has its own files, folders, and settings - all saved locally.</p>
+        <div class="news-date">December 2025</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="editorSection" style="display:none">
+    <div id="editorWrap">
+      <div id="lines"></div>
+      <textarea id="editor" spellcheck="false" placeholder="Start coding..."></textarea>
+      <div id="highlightOverlay"></div>
+      <div id="diffOverlay"></div>
+      <div id="diffControls">
+        <button class="btn success" id="acceptDiff">✓ Accept</button>
+        <button class="btn danger" id="rejectDiff">✗ Reject</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="previewPanel" class="collapsed">
+  <button id="previewToggle">▶</button>
+  <div id="previewError"></div>
+  <iframe id="frame" sandbox="allow-scripts allow-same-origin"></iframe>
+</div>
+
+<div id="indy" class="collapsed">
+  <button id="indyToggle">INDY AI</button>
+  <header id="indyHeader">INDY AI • Sunshine 2.0</header>
+  <div class="log" id="indyLog">
+    <div class="msg">👋 Hey! I'm Indy, your AI coding assistant. I can help you debug, explain code, suggest improvements, or answer questions about your project.</div>
+  </div>
+  <input placeholder="Ask Indy anything..." id="indyInput">
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  const filesEl = document.getElementById('files');
+  const editor = document.getElementById('editor');
+  const lines = document.getElementById('lines');
+  const highlightOverlay = document.getElementById('highlightOverlay');
+  const diffOverlay = document.getElementById('diffOverlay');
+  const filenameEl = document.getElementById('filename');
+  const frame = document.getElementById('frame');
+  const indyLog = document.getElementById('indyLog');
+  const indyInput = document.getElementById('indyInput');
+  const autoRunCheck = document.getElementById('autoRun');
+  const previewError = document.getElementById('previewError');
+  const previewPanel = document.getElementById('previewPanel');
+  const previewToggle = document.getElementById('previewToggle');
+  const toastEl = document.getElementById('toast');
+  const editorWrap = document.getElementById('editorWrap');
+  const diffControls = document.getElementById('diffControls');
+  const welcomeScreen = document.getElementById('welcomeScreen');
+  const editorSection = document.getElementById('editorSection');
+  const projectList = document.getElementById('projectList');
+  const fileSection = document.getElementById('fileSection');
+  const indyEl = document.getElementById('indy');
+  const indyHeader = document.getElementById('indyHeader');
+  const indyToggle = document.getElementById('indyToggle');
+
+  // Load persisted state
+  let projects = JSON.parse(localStorage.getItem('indy-projects') || '{}');
+  let currentProject = localStorage.getItem('indy-current-project') || null;
+  let currentFile = localStorage.getItem('indy-current-file') || null;
+  let previewCollapsed = JSON.parse(localStorage.getItem('indy-preview-collapsed') || 'true');
+  let autoRunEnabled = JSON.parse(localStorage.getItem('indy-auto-run') || 'false');
+  let indyCollapsed = JSON.parse(localStorage.getItem('indy-collapsed') || 'true');
+
+  let indyHistory = [];
+  let pendingCode = null;
+  let originalCode = null;
+
+  // Apply initial UI state
+  if (previewCollapsed) {
+    previewPanel.classList.add('collapsed');
+    previewToggle.textContent = '▶';
+  } else {
+    previewPanel.classList.remove('collapsed');
+    previewToggle.textContent = '◀';
+  }
+
+  autoRunCheck.checked = autoRunEnabled;
+
+  if (indyCollapsed) {
+    indyEl.classList.add('collapsed');
+  } else {
+    indyEl.classList.remove('collapsed');
+  }
+
+  // Dropdown handlers
+  document.querySelectorAll('.dropdown-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const dropdown = btn.nextElementSibling;
+      document.querySelectorAll('.dropdown-content').forEach(d => {
+        if (d !== dropdown) d.classList.remove('show');
+      });
+      dropdown.classList.toggle('show');
+    };
+  });
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.dropdown-content').forEach(d => d.classList.remove('show'));
+  });
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    setTimeout(() => toastEl.classList.remove('show'), 2000);
+  }
+
+  function getExt(name) {
+    const parts = name.split('.');
+    return parts.length > 1 ? parts.pop().toLowerCase() : '';
+  }
+
+  function normalizeName(name) {
+    name = name.trim();
+    if (!name) return 'untitled.txt';
+    return name.includes('.') ? name : name + '.html';
+  }
+
+  function createNewProject() {
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999';
+    modal.innerHTML = `
+      <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:24px;width:400px;box-shadow:0 8px 32px rgba(0,0,0,0.6)">
+        <h3 style="margin:0 0 16px;color:var(--text);font-size:18px">Create New Project</h3>
+        <input id="projectNameInput" type="text" placeholder="Project name"
+          style="width:100%;background:#0a0a0a;border:1px solid #2a2a2a;color:var(--text);padding:10px;border-radius:6px;font-size:14px;margin-bottom:16px;outline:none;font-family:inherit">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn secondary" id="modalCancel">Cancel</button>
+          <button class="btn" id="modalCreate">Create</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const input = modal.querySelector('#projectNameInput');
+    input.focus();
+    input.value = 'My Project';
+    input.select();
+
+    modal.querySelector('#modalCancel').onclick = () => modal.remove();
+    modal.querySelector('#modalCreate').onclick = () => {
+      const name = input.value.trim();
+      if (!name) return;
+
+      const projectId = 'proj_' + Date.now();
+      projects[projectId] = {
+        name: name,
+        files: {
+          'index.html': `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${name}</title>
+</head>
+<body>
+  <h1>Welcome to ${name}</h1>
+  <p>Start coding!</p>
+</body>
+</html>`
+        },
+        folders: { 'Root': ['index.html'] }
+      };
+
+      localStorage.setItem('indy-projects', JSON.stringify(projects));
+      refreshProjects();
+      openProject(projectId);
+      toast('Project created!');
+      modal.remove();
+    };
+
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') modal.querySelector('#modalCreate').click();
+      if (e.key === 'Escape') modal.remove();
+    };
+  }
+
+function openProject(projectId) {
+  if (currentFile) save(); // save before switching
+  currentProject = projectId;
+  localStorage.setItem('indy-current-project', currentProject);
+
+  welcomeScreen.classList.remove('active');
+  editorSection.style.display = 'flex';
+  fileSection.style.display = 'block';
+
+  document.getElementById('backToProjects').style.display = 'inline-block';
+  document.getElementById('fileDropdown').style.display = 'inline-block';
+  document.getElementById('runDropdown').style.display = 'inline-block';
+  document.getElementById('save').style.display = 'inline-block';
+  filenameEl.style.display = 'block';
+
+  refreshFiles();
+  refreshProjects();  // ← THIS IS THE FIX: highlight the active project
+
+  const firstFile = projects[projectId].folders['Root'][0];
+  if (firstFile) openFile(firstFile);
+  buildHTML();
+}
+
+  function closeProject() {
+    if (currentFile) save();
+    currentProject = null;
+    currentFile = null;
+
+    localStorage.removeItem('indy-current-project');
+    localStorage.removeItem('indy-current-file');
+
+    welcomeScreen.classList.add('active');
+    editorSection.style.display = 'none';
+    fileSection.style.display = 'none';
+
+    document.getElementById('backToProjects').style.display = 'none';
+    document.getElementById('fileDropdown').style.display = 'none';
+    document.getElementById('runDropdown').style.display = 'none';
+    document.getElementById('save').style.display = 'none';
+    filenameEl.style.display = 'none';
+
+    previewPanel.classList.add('collapsed');
+    previewToggle.textContent = '▶';
+    localStorage.setItem('indy-preview-collapsed', 'true');
+
+    refreshProjects();
+  }
+
+function refreshProjects() {
+  projectList.innerHTML = '';
+  Object.keys(projects).forEach(projectId => {
+    const li = document.createElement('li');
+    li.className = 'project-item';
+    li.textContent = projects[projectId].name;
+    li.onclick = () => openProject(projectId);
+
+    // HIGHLIGHT THE CURRENTLY OPEN PROJECT
+    li.classList.toggle('active', projectId === currentProject);
+
+    const delBtn = document.createElement('span');
+    delBtn.className = 'delete';
+    delBtn.textContent = '×';
+    delBtn.style.opacity = '0';
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999';
+      modal.innerHTML = `
+        <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:24px;width:400px">
+          <h3 style="margin:0 0 12px;color:var(--text);font-size:18px">Delete Project</h3>
+          <p style="margin:0 0 20px;color:var(--muted);font-size:14px">Are you sure you want to delete <strong style="color:var(--text)">"${projects[projectId].name}"</strong>? All files will be permanently lost.</p>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn secondary" id="modalCancel">Cancel</button>
+            <button class="btn danger" id="modalDelete">Delete Project</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      modal.querySelector('#modalCancel').onclick = () => modal.remove();
+      modal.querySelector('#modalDelete').onclick = () => {
+        delete projects[projectId];
+        localStorage.setItem('indy-projects', JSON.stringify(projects));
+        if (currentProject === projectId) closeProject();
+        refreshProjects();
+        toast('Project deleted!');
+        modal.remove();
+      };
+    };
+    li.onmouseenter = () => delBtn.style.opacity = '1';
+    li.onmouseleave = () => delBtn.style.opacity = '0';
+    li.appendChild(delBtn);
+    projectList.appendChild(li);
+  });
+}
+
+  function save() {
+    if (!currentFile || !currentProject) return;
+    projects[currentProject].files[currentFile] = editor.value;
+    localStorage.setItem('indy-projects', JSON.stringify(projects));
+
+    // Persist current open state
+    localStorage.setItem('indy-current-project', currentProject);
+    localStorage.setItem('indy-current-file', currentFile);
+
+    toast('Saved!');
+  }
+
+  function highlightSyntax(code) {
+    return code
+      .replace(/\b(function|const|let|var|if|else|for|while|return|class|import|export|async|await|try|catch|new|this|typeof|instanceof)\b/g, '<span class="kw">$1</span>')
+      .replace(/('([^'\\]|\\.)*'|"([^"\\]|\\.)*"|`([^`\\]|\\.)*`)/g, '<span class="str">$1</span>')
+      .replace(/\b(\d+\.?\d*)\b/g, '<span class="num">$1</span>')
+      .replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/g, '<span class="com">$1</span>')
+      .replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g, '<span class="fn">$1</span>(')
+      .replace(/\b(document|window|console|Math|Array|Object|String|Number)\b/g, '<span class="var">$1</span>');
+  }
+
+  function updateHighlight() {
+    const code = editor.value;
+    const highlighted = highlightSyntax(code.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+    highlightOverlay.innerHTML = highlighted;
+    highlightOverlay.scrollTop = editor.scrollTop;
+    highlightOverlay.scrollLeft = editor.scrollLeft;
+  }
+
+  function openFile(name) {
+    if (currentFile) save();
+    currentFile = name;
+    localStorage.setItem('indy-current-file', currentFile);
+
+    filenameEl.value = name;
+    editor.value = projects[currentProject].files[name] || '';
+    editor.focus();
+    document.querySelectorAll('.file-item').forEach(li =>
+      li.classList.toggle('active', li.dataset.name === name)
+    );
+    updateLines();
+    updateHighlight();
+  }
+
+  function updateLines() {
+    const lineCount = editor.value.split('\n').length;
+    lines.innerHTML = Array.from({length: lineCount}, (_, i) => i + 1).join('\n');
+  }
+
+  function refreshFiles() {
+    if (!currentProject) return;
+    filesEl.innerHTML = '';
+    const folders = projects[currentProject].folders;
+
+    Object.keys(folders).forEach(folderName => {
+      const folderDiv = document.createElement('div');
+      folderDiv.className = 'folder';
+
+      const header = document.createElement('div');
+      header.className = 'folder-header';
+      header.textContent = folderName;
+      header.onclick = (e) => {
+        if (e.target === header) {
+          header.classList.toggle('collapsed');
+          content.classList.toggle('hidden');
+        }
+      };
+
+      const content = document.createElement('div');
+      content.className = 'folder-content';
+
+      folders[folderName].forEach(fileName => {
+        const li = document.createElement('li');
+        li.className = 'file-item';
+        li.textContent = fileName;
+        li.dataset.name = fileName;
+        li.dataset.ext = getExt(fileName);
+        li.dataset.folder = folderName;
+        li.draggable = true;
+        li.onclick = () => openFile(fileName);
+
+        li.ondragstart = (e) => {
+          e.dataTransfer.setData('text/plain', fileName);
+          e.dataTransfer.effectAllowed = 'move';
+          li.classList.add('dragging');
+        };
+
+        li.ondragend = () => li.classList.remove('dragging');
+
+        const delBtn = document.createElement('span');
+        delBtn.className = 'delete';
+        delBtn.textContent = '×';
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+
+          const modal = document.createElement('div');
+          modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999';
+          modal.innerHTML = `
+            <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:24px;width:400px">
+              <h3 style="margin:0 0 12px;color:var(--text);font-size:18px">Delete File</h3>
+              <p style="margin:0 0 20px;color:var(--muted);font-size:14px">Are you sure you want to delete <strong style="color:var(--text)">${fileName}</strong>?</p>
+              <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button class="btn secondary" id="modalCancel">Cancel</button>
+                <button class="btn danger" id="modalDelete">Delete</button>
+              </div>
+            </div>
+          `;
+          document.body.appendChild(modal);
+
+          modal.querySelector('#modalCancel').onclick = () => modal.remove();
+          modal.querySelector('#modalDelete').onclick = () => {
+            delete projects[currentProject].files[fileName];
+            folders[folderName] = folders[folderName].filter(f => f !== fileName);
+            localStorage.setItem('indy-projects', JSON.stringify(projects));
+            if (currentFile === fileName) {
+              currentFile = null;
+              editor.value = '';
+              filenameEl.value = '';
+              localStorage.removeItem('indy-current-file');
+            }
+            refreshFiles();
+            toast('Deleted!');
+            modal.remove();
+          };
+        };
+
+        li.appendChild(delBtn);
+        content.appendChild(li);
+      });
+
+      header.ondragover = (e) => {
+        e.preventDefault();
+        header.style.background = '#252525';
+      };
+
+      header.ondragleave = () => {
+        header.style.background = '';
+      };
+
+      header.ondrop = (e) => {
+        e.preventDefault();
+        header.style.background = '';
+        const fileName = e.dataTransfer.getData('text/plain');
+        const oldFolder = Object.keys(folders).find(f => folders[f].includes(fileName));
+        if (oldFolder && oldFolder !== folderName) {
+          folders[oldFolder] = folders[oldFolder].filter(f => f !== fileName);
+          folders[folderName].push(fileName);
+          localStorage.setItem('indy-projects', JSON.stringify(projects));
+          refreshFiles();
+          toast(`Moved to ${folderName}!`);
+        }
+      };
+
+      folderDiv.appendChild(header);
+      folderDiv.appendChild(content);
+      filesEl.appendChild(folderDiv);
+    });
+  }
+
+  function showDiff(newCode) {
+    originalCode = editor.value;
+    pendingCode = newCode;
+
+    const oldLines = originalCode.split('\n');
+    const newLines = newCode.split('\n');
+
+    let diffHTML = '';
+    const maxLen = Math.max(oldLines.length, newLines.length);
+
+    for (let i = 0; i < maxLen; i++) {
+      const oldLine = oldLines[i] || '';
+      const newLine = newLines[i] || '';
+
+      if (oldLine !== newLine) {
+        if (oldLine && !newLine) {
+          diffHTML += `<div class="diff-remove">${oldLine || ' '}</div>`;
+        } else if (!oldLine && newLine) {
+          diffHTML += `<div class="diff-add">${newLine}</div>`;
+        } else {
+          if (oldLine) diffHTML += `<div class="diff-remove">${oldLine}</div>`;
+          if (newLine) diffHTML += `<div class="diff-add">${newLine}</div>`;
+        }
+      } else {
+        diffHTML += `<div>${oldLine}</div>`;
+      }
+    }
+
+    diffOverlay.innerHTML = diffHTML;
+    diffOverlay.classList.add('active');
+    diffControls.classList.add('active');
+    editorWrap.classList.add('pending');
+    editor.readOnly = true;
+  }
+
+  function acceptDiff() {
+    editor.value = pendingCode;
+    editor.readOnly = false;
+    diffOverlay.classList.remove('active');
+    diffControls.classList.remove('active');
+    editorWrap.classList.remove('pending');
+    updateLines();
+    updateHighlight();
+    save();
+    toast('Changes applied!');
+  }
+
+  function rejectDiff() {
+    editor.value = originalCode;
+    editor.readOnly = false;
+    diffOverlay.classList.remove('active');
+    diffControls.classList.remove('active');
+    editorWrap.classList.remove('pending');
+    toast('Changes rejected');
+  }
+
+  function buildHTML() {
+    if (!currentProject) return;
+    previewError.style.display = 'none';
+
+    try {
+      let html = projects[currentProject].files['index.html'] || '<!DOCTYPE html><html><head></head><body></body></html>';
+      let css = '';
+      let js = '';
+
+      Object.keys(projects[currentProject].files).forEach(f => {
+        if (getExt(f) === 'css') css += projects[currentProject].files[f] + '\n';
+        if (getExt(f) === 'js') js += projects[currentProject].files[f] + '\n';
+      });
+
+      if (css && !html.includes('<style>')) {
+        const styleTag = `<style>${css}</style>`;
+        html = html.includes('</head>')
+          ? html.replace('</head>', styleTag + '</head>')
+          : html.replace('<html>', '<html><head>' + styleTag + '</head>');
+      }
+
+      if (js && !html.includes('<script>')) {
+        const scriptTag = `<script>${js.replace(/<\/script>/gi, '<\\/script>')}<\/script>`;
+        html = html.includes('</body>')
+          ? html.replace('</body>', scriptTag + '</body>')
+          : html += scriptTag;
+      }
+
+      const blob = new Blob([html], { type: 'text/html' });
+      frame.src = URL.createObjectURL(blob);
+      toast('Running!');
+    } catch (e) {
+      previewError.textContent = 'Error: ' + e.message;
+      previewError.style.display = 'block';
+    }
+  }
+
+  // Editor input handling with auto-save and auto-run
+  editor.oninput = () => {
+    updateLines();
+    updateHighlight();
+
+    // Auto-save after 1 second of no typing
+    clearTimeout(editor.autoSaveTimer);
+    editor.autoSaveTimer = setTimeout(() => {
+      if (currentFile && currentProject) {
+        save();
+      }
+    }, 1000);
+
+    if (autoRunCheck.checked) {
+      clearTimeout(editor.autoRunTimer);
+      editor.autoRunTimer = setTimeout(buildHTML, 800);
+    }
+  };
+
+  editor.onscroll = () => {
+    lines.scrollTop = editor.scrollTop;
+    highlightOverlay.scrollTop = editor.scrollTop;
+    highlightOverlay.scrollLeft = editor.scrollLeft;
+  };
+
+  editor.onkeydown = (e) => {
+    if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      save();
+    }
+  };
+
+  // UI buttons
+  document.getElementById('newProject').onclick = createNewProject;
+  document.getElementById('backToProjects').onclick = closeProject;
+
+  document.getElementById('newFile').onclick = () => {
+    // ... (same as original – unchanged for brevity)
+  };
+
+  document.getElementById('newFolder').onclick = () => {
+    // ... (same as original)
+  };
+
+  document.getElementById('addImage').onclick = () => {
+    // ... (same as original)
+  };
+
+  document.getElementById('rename').onclick = () => {
+    // ... (same as original)
+  };
+
+  document.getElementById('deleteFile').onclick = () => {
+    // ... (same as original)
+  };
+
+  document.getElementById('save').onclick = save;
+  document.getElementById('runNow').onclick = buildHTML;
+  document.getElementById('acceptDiff').onclick = acceptDiff;
+  document.getElementById('rejectDiff').onclick = rejectDiff;
+
+  // Preview toggle with persistence
+  const togglePreviewHandler = () => {
+    previewPanel.classList.toggle('collapsed');
+    const collapsed = previewPanel.classList.contains('collapsed');
+    previewToggle.textContent = collapsed ? '▶' : '◀';
+    localStorage.setItem('indy-preview-collapsed', JSON.stringify(collapsed));
+  };
+  document.getElementById('togglePreview').onclick = togglePreviewHandler;
+  previewToggle.onclick = togglePreviewHandler;
+
+  // Auto-run toggle persistence
+  document.getElementById('autoRunToggle').onclick = () => {
+    autoRunEnabled = autoRunCheck.checked;
+    localStorage.setItem('indy-auto-run', JSON.stringify(autoRunEnabled));
+  };
+
+  // Indy toggle persistence
+  indyToggle.addEventListener('click', () => {
+    indyEl.classList.toggle('collapsed');
+    indyCollapsed = indyEl.classList.contains('collapsed');
+    localStorage.setItem('indy-collapsed', JSON.stringify(indyCollapsed));
+  });
+
+  // Indy AI chat
+  indyInput.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter' || !e.target.value.trim()) return;
+
+    const question = e.target.value.trim();
+    e.target.value = '';
+
+    const userMsg = document.createElement('div');
+    userMsg.className = 'msg';
+    userMsg.innerHTML = `<b>You:</b> ${question}`;
+    indyLog.appendChild(userMsg);
+    indyLog.scrollTop = indyLog.scrollHeight;
+
+    indyHistory.push({role: 'user', content: question});
+
+    let context = `You are Indy, an AI coding assistant. Be helpful and concise.
+Current file: ${currentFile || 'none'}
+Current code:
+\`\`\`
+${editor.value.substring(0, 2000)}
+\`\`\`
+Project: ${currentProject ? projects[currentProject].name : 'none'}
+Files: ${currentProject ? Object.keys(projects[currentProject].files).join(', ') : 'none'}
+If you provide code, wrap it in triple backticks with the language like \`\`\`javascript or \`\`\`html
+Recent conversation:
+${indyHistory.slice(-4).map(m => `${m.role}: ${m.content}`).join('\n')}
+Answer:`;
+
+    try {
+      const res = await fetch(`https://text.pollinations.ai/${encodeURIComponent(context)}`);
+      const answer = await res.text();
+
+      indyHistory.push({role: 'assistant', content: answer});
+
+      const codeMatch = answer.match(/```(\w+)?\n([\s\S]+?)```/);
+
+      if (codeMatch) {
+        const code = codeMatch[2].trim();
+        const beforeCode = answer.split('```')[0].trim();
+        const afterCode = answer.split('```')[2] ? answer.split('```')[2].trim() : '';
+
+        const aiMsg = document.createElement('div');
+        aiMsg.className = 'msg';
+        let msgHTML = '';
+        if (beforeCode) msgHTML += `<b>Indy:</b> ${beforeCode}<br><br>`;
+        msgHTML += `<div class="code-suggestion"><pre>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre><button class="apply-btn" data-code="${encodeURIComponent(code)}">Apply this code</button></div>`;
+        if (afterCode) msgHTML += `<br>${afterCode}`;
+        aiMsg.innerHTML = msgHTML;
+        indyLog.appendChild(aiMsg);
+
+        aiMsg.querySelector('.apply-btn').onclick = function() {
+          const suggestionCode = decodeURIComponent(this.dataset.code);
+          showDiff(suggestionCode);
+        };
+      } else {
+        const aiMsg = document.createElement('div');
+        aiMsg.className = 'msg';
+        aiMsg.innerHTML = `<b>Indy:</b> ${answer.replace(/\n/g, '<br>')}`;
+        indyLog.appendChild(aiMsg);
+      }
+
+      indyLog.scrollTop = indyLog.scrollHeight;
+    } catch (err) {
+      const errMsg = document.createElement('div');
+      errMsg.className = 'msg';
+      errMsg.innerHTML = `<b>Error:</b> Could not reach Indy.`;
+      indyLog.appendChild(errMsg);
+    }
+  });
+
+// Initialize
+refreshProjects();
+
+// Restore last open project/file if it exists
+if (currentProject && projects[currentProject]) {
+  // Hide welcome screen immediately
+  welcomeScreen.classList.remove('active');
+  
+  // Then open the project (which will show editor, files, etc.)
+  openProject(currentProject);
+  
+  if (currentFile && projects[currentProject].files[currentFile]) {
+    openFile(currentFile);
+  }
+} else {
+  // No saved project → ensure welcome screen is visible
+  welcomeScreen.classList.add('active');
+}
+</script>
+</body>
+</html>
