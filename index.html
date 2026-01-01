@@ -28,7 +28,7 @@
       display:flex;align-items:center;gap:6px}
     .dropdown-btn:hover{background:var(--accent-hover);transform:translateY(-1px)}
     .dropdown-content{display:none;position:absolute;top:100%;right:0;margin-top:4px;
-      background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;min-width:160px;
+      background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;min-width:220px;
       box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:1000;overflow:hidden}
     .dropdown-content.show{display:block}
     .dropdown-item{padding:10px 14px;cursor:pointer;font-size:13px;display:flex;
@@ -79,6 +79,7 @@
     .file-item[data-ext="html"]::before{content:'🌐'}
     .file-item[data-ext="css"]::before{content:'🎨'}
     .file-item[data-ext="js"]::before{content:'⚡'}
+    .file-item[data-ext="py"]::before{content:'🐍'}
     .file-item.active{background:var(--accent);box-shadow:0 0 0 1px var(--glow),0 2px 8px rgba(107,70,193,0.3)}
     .file-item:hover:not(.active){background:#1a1a1a}
     .file-item.dragging{opacity:0.5}
@@ -103,12 +104,13 @@
     
     #diffOverlay{position:absolute;top:0;left:50px;right:0;bottom:0;
       pointer-events:none;padding:12px;line-height:1.5;font-size:13px;white-space:pre;
-      font-family:inherit;overflow:hidden;display:none}
+      font-family:inherit;overflow:hidden;display:none;z-index:2}
     #diffOverlay.active{display:block}
-    .diff-add{background:rgba(16,185,129,0.2);border-left:3px solid var(--success)}
-    .diff-remove{background:rgba(239,68,68,0.2);border-left:3px solid var(--danger);text-decoration:line-through}
+    .diff-add{background:rgba(16,185,129,0.12);border-left:3px solid var(--success);padding:6px;margin:4px 0;border-radius:6px}
+    .diff-remove{background:rgba(239,68,68,0.12);border-left:3px solid var(--danger);text-decoration:line-through;padding:6px;margin:4px 0;border-radius:6px}
 
-    #diffControls{position:absolute;top:10px;right:10px;display:none;gap:8px;z-index:100;
+    /* diff controls moved to top-left-ish and adjustable to avoid Indy */
+    #diffControls{position:absolute;top:10px;right:10px;display:none;gap:8px;z-index:120;
       background:rgba(10,10,10,0.95);padding:8px;border-radius:8px;border:1px solid #2a2a2a;
       box-shadow:0 4px 16px rgba(0,0,0,0.6)}
     #diffControls.active{display:flex}
@@ -117,7 +119,7 @@
     
     #highlightOverlay{position:absolute;top:0;left:50px;right:0;bottom:0;
       pointer-events:none;padding:12px;line-height:1.5;font-size:13px;white-space:pre;
-      font-family:inherit;overflow:hidden}
+      font-family:inherit;overflow:hidden;z-index:1}
     .kw{color:#c678dd} /* keywords: purple */
     .str{color:#98c379} /* strings: green */
     .num{color:#d19a66} /* numbers: orange */
@@ -177,10 +179,28 @@
       padding:12px;outline:none;font-size:13px}
     #indy input:focus{background:#0a0a0a}
 
+    /* thinking animation */
+    .thinking { display:inline-block; width:40px; text-align:center; }
+    .thinking span { display:inline-block; width:8px; height:8px; margin:0 2px; background:#fff; border-radius:50%; opacity:.3; transform:translateY(0); animation:dot 1s infinite linear; }
+    .thinking span:nth-child(2){ animation-delay:0.15s }
+    .thinking span:nth-child(3){ animation-delay:0.3s }
+    @keyframes dot { 50% { opacity: 1; transform:translateY(-6px); } 100% { opacity:.3; transform:translateY(0); } }
+
     .toast{position:fixed;bottom:80px;right:20px;background:var(--accent);color:white;
       padding:12px 20px;border-radius:8px;font-size:13px;opacity:0;transition:opacity 0.3s;
       pointer-events:none;z-index:1000;box-shadow:0 4px 16px rgba(0,0,0,0.4)}
     .toast.show{opacity:1}
+
+    /* tutorial overlay */
+    #tutorialOverlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1500;display:none;align-items:flex-start;justify-content:center}
+    #tutorialOverlay.active{display:flex}
+    .tutorial-step{background:#111;border:1px solid #222;padding:18px;border-radius:12px;color:var(--text);margin-top:80px;max-width:420px}
+    .tutorial-step h3{margin:0 0 8px}
+    .tutorial-arrow{position:absolute;width:220px;height:80px;background:transparent;pointer-events:none;transition:all 0.25s}
+    .tutorial-controls{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+    .suggestion-dropdown{position:absolute;background:#111;border:1px solid #2a2a2a;padding:6px;border-radius:6px;z-index:200;display:none;min-width:160px}
+    .suggestion-item{padding:6px 8px;cursor:pointer}
+    .suggestion-item:hover{background:#222}
   </style>
 </head>
 <body>
@@ -199,6 +219,8 @@
         <div class="dropdown-item" id="addImage">🖼️ Add Image</div>
         <div class="dropdown-item" id="rename">✏️ Rename</div>
         <div class="dropdown-item" id="deleteFile">🗑️ Delete</div>
+        <div class="dropdown-item" id="makePy">🐍 New Python File</div>
+        <div class="dropdown-item" id="showTutorial">🧭 Show Tutorial</div>
       </div>
     </div>
     
@@ -207,13 +229,17 @@
       <div class="dropdown-content">
         <div class="dropdown-item" id="runNow">▶ Run Now</div>
         <div class="dropdown-item" id="autoRunToggle">
-          <input type="checkbox" id="autoRun"> Auto Run
+          <input type="checkbox" id="autoRun"> Auto Run (saves then runs)
         </div>
         <div class="dropdown-item" id="togglePreview">👁️ Toggle Preview</div>
+        <div class="dropdown-item" id="autoSuggestToggle">
+          <input type="checkbox" id="autoSuggest"> Auto Suggestions
+        </div>
       </div>
     </div>
     
     <button class="btn" id="save" style="display:none">💾 Save</button>
+    <button class="btn secondary" id="pyMaker" style="display:none">PY Maker</button>
   </div>
 
   <div id="sidebar">
@@ -232,36 +258,7 @@
     
     <div class="news-section">
       <h3 style="color:var(--text);margin-bottom:20px;font-size:18px">📰 What's New</h3>
-      
-      <div class="news-item">
-        <h3>✨ Advanced Diff System</h3>
-        <p>AI code suggestions now show a beautiful diff view with red (removed) and green (added) highlighting. Accept or reject changes with one click!</p>
-        <div class="news-date">December 2025</div>
-      </div>
-      
-      <div class="news-item">
-        <h3>🎨 Syntax Highlighting</h3>
-        <p>Enjoy color-coded syntax with purple keywords, green strings, orange numbers, and more. Makes reading code effortless!</p>
-        <div class="news-date">December 2025</div>
-      </div>
-      
-      <div class="news-item">
-        <h3>📁 Smart Folders & Drag-Drop</h3>
-        <p>Organize your files with collapsible folders. Just drag and drop files between folders to reorganize your project structure.</p>
-        <div class="news-date">December 2025</div>
-      </div>
-      
-      <div class="news-item">
-        <h3>🤖 Moveable Indy Assistant</h3>
-        <p>The AI assistant window is now draggable and resizable! Position it anywhere on your screen and it remembers your preferences.</p>
-        <div class="news-date">December 2025</div>
-      </div>
-      
-      <div class="news-item">
-        <h3>💾 Multi-Project Support</h3>
-        <p>Create and manage multiple projects! Each project has its own files, folders, and settings - all saved locally.</p>
-        <div class="news-date">December 2025</div>
-      </div>
+      <!-- news items omitted for brevity -->
     </div>
   </div>
 
@@ -275,6 +272,8 @@
         <button class="btn success" id="acceptDiff">✓ Accept</button>
         <button class="btn danger" id="rejectDiff">✗ Reject</button>
       </div>
+      <!-- suggestion dropdown -->
+      <div id="suggestionDropdown" class="suggestion-dropdown"></div>
     </div>
   </div>
 </div>
@@ -287,11 +286,34 @@
 
 <div id="indy" class="collapsed">
   <button id="indyToggle">INDY AI</button>
-  <header id="indyHeader">INDY AI • Sunshine 2.0</header>
+  <header id="indyHeader">INDY AI • Sunshine 2.0 <span id="indyThinking" style="margin-left:auto;display:none"><span class="thinking"><span></span><span></span><span></span></span></span></header>
   <div class="log" id="indyLog">
     <div class="msg">👋 Hey! I'm Indy, your AI coding assistant. I can help you debug, explain code, suggest improvements, or answer questions about your project.</div>
   </div>
   <input placeholder="Ask Indy anything..." id="indyInput">
+</div>
+
+<!-- console panel -->
+<div id="appConsole" style="position:fixed;right:400px;bottom:12px;width:380px;max-height:240px;background:#0f0f12;border:1px solid #222;border-radius:10px;overflow:auto;padding:10px;z-index:95;display:none">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    <strong style="flex:1">Console</strong>
+    <button class="btn secondary" id="clearConsole">Clear</button>
+    <button class="btn secondary" id="closeConsole">Hide</button>
+  </div>
+  <div id="consoleLog" style="font-size:12px;color:#ddd;overflow:auto;max-height:180px"></div>
+</div>
+
+<div id="tutorialOverlay">
+  <div class="tutorial-arrow" id="tutorialArrow"></div>
+  <div class="tutorial-step" id="tutorialStep">
+    <h3 id="tutorialTitle">Welcome to Indy Studio</h3>
+    <div id="tutorialText" style="color:var(--muted)"></div>
+    <div class="tutorial-controls">
+      <button class="btn secondary" id="tutorialPrev">Prev</button>
+      <button class="btn" id="tutorialNext">Next</button>
+      <button class="btn secondary" id="tutorialEnd">End</button>
+    </div>
+  </div>
 </div>
 
 <div id="toast" class="toast"></div>
@@ -307,6 +329,7 @@
   const indyLog = document.getElementById('indyLog');
   const indyInput = document.getElementById('indyInput');
   const autoRunCheck = document.getElementById('autoRun');
+  const autoSuggestCheck = document.getElementById('autoSuggest');
   const previewError = document.getElementById('previewError');
   const previewPanel = document.getElementById('previewPanel');
   const previewToggle = document.getElementById('previewToggle');
@@ -320,6 +343,22 @@
   const indyEl = document.getElementById('indy');
   const indyHeader = document.getElementById('indyHeader');
   const indyToggle = document.getElementById('indyToggle');
+  const indyThinking = document.getElementById('indyThinking');
+  const appConsole = document.getElementById('appConsole');
+  const consoleLog = document.getElementById('consoleLog');
+  const clearConsoleBtn = document.getElementById('clearConsole');
+  const closeConsoleBtn = document.getElementById('closeConsole');
+  const suggestionDropdown = document.getElementById('suggestionDropdown');
+
+  // tutorial elements
+  const tutorialOverlay = document.getElementById('tutorialOverlay');
+  const tutorialArrow = document.getElementById('tutorialArrow');
+  const tutorialStep = document.getElementById('tutorialStep');
+  const tutorialTitle = document.getElementById('tutorialTitle');
+  const tutorialText = document.getElementById('tutorialText');
+  const tutorialPrev = document.getElementById('tutorialPrev');
+  const tutorialNext = document.getElementById('tutorialNext');
+  const tutorialEnd = document.getElementById('tutorialEnd');
 
   // Load persisted state
   let projects = JSON.parse(localStorage.getItem('indy-projects') || '{}');
@@ -328,6 +367,7 @@
   let previewCollapsed = JSON.parse(localStorage.getItem('indy-preview-collapsed') || 'true');
   let autoRunEnabled = JSON.parse(localStorage.getItem('indy-auto-run') || 'false');
   let indyCollapsed = JSON.parse(localStorage.getItem('indy-collapsed') || 'true');
+  let autoSuggestEnabled = JSON.parse(localStorage.getItem('indy-auto-suggest') || 'true');
 
   let indyHistory = [];
   let pendingCode = null;
@@ -343,6 +383,7 @@
   }
 
   autoRunCheck.checked = autoRunEnabled;
+  autoSuggestCheck.checked = autoSuggestEnabled;
 
   if (indyCollapsed) {
     indyEl.classList.add('collapsed');
@@ -365,10 +406,20 @@
     document.querySelectorAll('.dropdown-content').forEach(d => d.classList.remove('show'));
   });
 
-  function toast(msg) {
+  function toast(msg, timeout=2000) {
     toastEl.textContent = msg;
     toastEl.classList.add('show');
-    setTimeout(() => toastEl.classList.remove('show'), 2000);
+    setTimeout(() => toastEl.classList.remove('show'), timeout);
+    // also log to console
+    logConsole(msg);
+  }
+
+  function logConsole(msg) {
+    const row = document.createElement('div');
+    row.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    consoleLog.appendChild(row);
+    consoleLog.scrollTop = consoleLog.scrollHeight;
+    appConsole.style.display = 'block';
   }
 
   function getExt(name) {
@@ -386,7 +437,7 @@
     const modal = document.createElement('div');
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999';
     modal.innerHTML = `
-      <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:24px;width:400px;box-shadow:0 8px 32px rgba(0,0,0,0.6)">
+      <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:24px;width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.6)">
         <h3 style="margin:0 0 16px;color:var(--text);font-size:18px">Create New Project</h3>
         <input id="projectNameInput" type="text" placeholder="Project name"
           style="width:100%;background:#0a0a0a;border:1px solid #2a2a2a;color:var(--text);padding:10px;border-radius:6px;font-size:14px;margin-bottom:16px;outline:none;font-family:inherit">
@@ -454,14 +505,16 @@ function openProject(projectId) {
   document.getElementById('fileDropdown').style.display = 'inline-block';
   document.getElementById('runDropdown').style.display = 'inline-block';
   document.getElementById('save').style.display = 'inline-block';
+  document.getElementById('pyMaker').style.display = 'inline-block';
   filenameEl.style.display = 'block';
 
   refreshFiles();
-  refreshProjects();  // ← THIS IS THE FIX: highlight the active project
+  refreshProjects();  // ← highlight the active project
 
   const firstFile = projects[projectId].folders['Root'][0];
   if (firstFile) openFile(firstFile);
   buildHTML();
+  adjustDiffControls(); // ensure position
 }
 
   function closeProject() {
@@ -481,6 +534,7 @@ function openProject(projectId) {
     document.getElementById('runDropdown').style.display = 'none';
     document.getElementById('save').style.display = 'none';
     filenameEl.style.display = 'none';
+    document.getElementById('pyMaker').style.display = 'none';
 
     previewPanel.classList.add('collapsed');
     previewToggle.textContent = '▶';
@@ -546,16 +600,17 @@ function refreshProjects() {
     localStorage.setItem('indy-current-file', currentFile);
 
     toast('Saved!');
+    logConsole(`Saved ${currentFile}`);
   }
 
   function highlightSyntax(code) {
     return code
-      .replace(/\b(function|const|let|var|if|else|for|while|return|class|import|export|async|await|try|catch|new|this|typeof|instanceof)\b/g, '<span class="kw">$1</span>')
+      .replace(/\b(function|const|let|var|if|else|for|while|return|class|import|export|async|await|try|catch|new|this|typeof|instanceof|def)\b/g, '<span class="kw">$1</span>')
       .replace(/('([^'\\]|\\.)*'|"([^"\\]|\\.)*"|`([^`\\]|\\.)*`)/g, '<span class="str">$1</span>')
       .replace(/\b(\d+\.?\d*)\b/g, '<span class="num">$1</span>')
-      .replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/g, '<span class="com">$1</span>')
+      .replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#.*$)/gm, '<span class="com">$1</span>')
       .replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g, '<span class="fn">$1</span>(')
-      .replace(/\b(document|window|console|Math|Array|Object|String|Number)\b/g, '<span class="var">$1</span>');
+      .replace(/\b(document|window|console|Math|Array|Object|String|Number|print)\b/g, '<span class="var">$1</span>');
   }
 
   function updateHighlight() {
@@ -729,6 +784,7 @@ function refreshProjects() {
     diffControls.classList.add('active');
     editorWrap.classList.add('pending');
     editor.readOnly = true;
+    adjustDiffControls();
   }
 
   function acceptDiff() {
@@ -752,9 +808,50 @@ function refreshProjects() {
     toast('Changes rejected');
   }
 
-  function buildHTML() {
+  // When Indy is open it can overlap diff controls — adjust dynamically
+  function adjustDiffControls() {
+    // default right offset
+    const indyOpen = !indyEl.classList.contains('collapsed');
+    const indyWidth = indyOpen ? indyEl.getBoundingClientRect().width : 0;
+    const rightOffset = indyOpen ? (indyWidth + 20) : 10; // leave some padding
+    diffControls.style.right = rightOffset + 'px';
+    // ensure it's on top
+    diffControls.style.zIndex = 120;
+  }
+
+  window.addEventListener('resize', adjustDiffControls);
+  const observer = new MutationObserver(adjustDiffControls);
+  observer.observe(indyEl, { attributes: true, attributeFilter: ['class'] });
+
+  function buildHTML(runFromUser=true) {
     if (!currentProject) return;
     previewError.style.display = 'none';
+
+    // require save before manual Run Now
+    const currentSaved = projects[currentProject].files[currentFile] === editor.value;
+    if (runFromUser && !currentSaved) {
+      // show a modal asking to save first
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999';
+      modal.innerHTML = `
+        <div style="background:#121212;border:1px solid #222;border-radius:12px;padding:20px;width:420px">
+          <h3 style="margin:0 0 8px;color:var(--text)">Save before running</h3>
+          <p style="color:var(--muted);margin:0 0 16px">You have unsaved changes. The preview only reflects saved files. What would you like to do?</p>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn secondary" id="runCancel">Cancel</button>
+            <button class="btn" id="saveRun">Save & Run</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      modal.querySelector('#runCancel').onclick = () => modal.remove();
+      modal.querySelector('#saveRun').onclick = () => {
+        save();
+        modal.remove();
+        buildHTML(false); // now run (non-user-initiated path)
+      };
+      return;
+    }
 
     try {
       let html = projects[currentProject].files['index.html'] || '<!DOCTYPE html><html><head></head><body></body></html>';
@@ -783,9 +880,11 @@ function refreshProjects() {
       const blob = new Blob([html], { type: 'text/html' });
       frame.src = URL.createObjectURL(blob);
       toast('Running!');
+      logConsole('Preview updated');
     } catch (e) {
       previewError.textContent = 'Error: ' + e.message;
       previewError.style.display = 'block';
+      logConsole('Preview error: ' + e.message);
     }
   }
 
@@ -803,8 +902,23 @@ function refreshProjects() {
     }, 1000);
 
     if (autoRunCheck.checked) {
+      // Auto-run will save current contents then run (complies with "save before run")
       clearTimeout(editor.autoRunTimer);
-      editor.autoRunTimer = setTimeout(buildHTML, 800);
+      editor.autoRunTimer = setTimeout(() => {
+        // persist current buffer directly to project so preview uses it
+        if (currentFile && currentProject) {
+          projects[currentProject].files[currentFile] = editor.value;
+          localStorage.setItem('indy-projects', JSON.stringify(projects));
+        }
+        buildHTML(false);
+      }, 800);
+    }
+
+    // Autocomplete suggestions
+    if (autoSuggestCheck.checked) {
+      handleAutocomplete();
+    } else {
+      hideSuggestionDropdown();
     }
   };
 
@@ -819,34 +933,139 @@ function refreshProjects() {
       e.preventDefault();
       save();
     }
+
+    // accept suggestion with Tab
+    if (e.key === 'Tab' && suggestionDropdown.style.display === 'block') {
+      e.preventDefault();
+      const first = suggestionDropdown.querySelector('.suggestion-item');
+      if (first) applySuggestion(first.textContent);
+      hideSuggestionDropdown();
+      return;
+    }
   };
 
   // UI buttons
   document.getElementById('newProject').onclick = createNewProject;
   document.getElementById('backToProjects').onclick = closeProject;
 
+  // New file flow (supports html, css, js, py)
   document.getElementById('newFile').onclick = () => {
-    // ... (same as original – unchanged for brevity)
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999';
+    modal.innerHTML = `
+      <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:20px;width:420px">
+        <h3 style="margin:0 0 12px;color:var(--text)">Create New File</h3>
+        <input id="newFilename" type="text" placeholder="filename (e.g. script.js or main.py)"
+          style="width:100%;background:#0a0a0a;border:1px solid #2a2a2a;color:var(--text);padding:10px;border-radius:6px;font-size:14px;margin-bottom:12px;outline:none">
+        <select id="fileType" style="width:100%;padding:8px;border-radius:6px;background:#0a0a0a;border:1px solid #2a2a2a;color:var(--text);margin-bottom:12px">
+          <option value="html">HTML</option>
+          <option value="css">CSS</option>
+          <option value="js">JavaScript</option>
+          <option value="py">Python</option>
+        </select>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn secondary" id="modalCancel">Cancel</button>
+          <button class="btn" id="modalCreate">Create</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    const input = modal.querySelector('#newFilename');
+    const select = modal.querySelector('#fileType');
+    input.focus();
+
+    modal.querySelector('#modalCancel').onclick = () => modal.remove();
+    modal.querySelector('#modalCreate').onclick = () => {
+      let name = input.value.trim();
+      const type = select.value;
+      if (!name) name = `untitled.${type}`;
+      if (!name.includes('.')) name = `${name}.${type}`;
+      name = normalizeName(name);
+      if (!projects[currentProject].files[name]) {
+        // create template content
+        let content = '';
+        if (getExt(name) === 'html') {
+          content = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${name}</title></head><body>\n\n</body></html>`;
+        } else if (getExt(name) === 'css') {
+          content = `/* ${name} */\nbody { font-family: sans-serif; }`;
+        } else if (getExt(name) === 'js') {
+          content = `// ${name}\nconsole.log('hello');`;
+        } else if (getExt(name) === 'py') {
+          content = `# ${name}\ndef main():\n    print('Hello from ${name}')\n\nif __name__ == '__main__':\n    main()`;
+        }
+        projects[currentProject].files[name] = content;
+        // add to Root
+        projects[currentProject].folders['Root'].push(name);
+        localStorage.setItem('indy-projects', JSON.stringify(projects));
+        refreshFiles();
+        openFile(name);
+        toast('File created');
+      } else {
+        toast('File already exists');
+      }
+      modal.remove();
+    };
+  };
+
+  // Quick python maker
+  document.getElementById('makePy').onclick = () => {
+    document.getElementById('newFile').click();
+    // preselect py after a short delay when modal is created
+    setTimeout(() => {
+      const sel = document.querySelector('#fileType');
+      if (sel) sel.value = 'py';
+      const name = document.querySelector('#newFilename');
+      if (name) name.value = `script_${Date.now()}.py`;
+    }, 50);
   };
 
   document.getElementById('newFolder').onclick = () => {
-    // ... (same as original)
+    const name = prompt('Folder name', 'New Folder');
+    if (!name) return;
+    projects[currentProject].folders[name] = [];
+    localStorage.setItem('indy-projects', JSON.stringify(projects));
+    refreshFiles();
+    toast('Folder created');
   };
 
   document.getElementById('addImage').onclick = () => {
-    // ... (same as original)
+    toast('Image add not implemented in this demo');
   };
 
   document.getElementById('rename').onclick = () => {
-    // ... (same as original)
+    if (!currentFile) return toast('No file selected');
+    const newName = prompt('Rename file to', currentFile);
+    if (!newName) return;
+    const normalized = normalizeName(newName);
+    projects[currentProject].files[normalized] = projects[currentProject].files[currentFile];
+    // replace in folders
+    Object.keys(projects[currentProject].folders).forEach(f => {
+      projects[currentProject].folders[f] = projects[currentProject].folders[f].map(x => x === currentFile ? normalized : x);
+    });
+    delete projects[currentProject].files[currentFile];
+    currentFile = normalized;
+    localStorage.setItem('indy-projects', JSON.stringify(projects));
+    refreshFiles();
+    openFile(normalized);
+    toast('Renamed');
   };
 
   document.getElementById('deleteFile').onclick = () => {
-    // ... (same as original)
+    if (!currentFile) return toast('No file selected');
+    if (!confirm(`Delete ${currentFile}?`)) return;
+    delete projects[currentProject].files[currentFile];
+    Object.keys(projects[currentProject].folders).forEach(f => {
+      projects[currentProject].folders[f] = projects[currentProject].folders[f].filter(x => x !== currentFile);
+    });
+    currentFile = null;
+    localStorage.setItem('indy-projects', JSON.stringify(projects));
+    refreshFiles();
+    openProject(currentProject);
+    toast('Deleted file');
   };
 
   document.getElementById('save').onclick = save;
-  document.getElementById('runNow').onclick = buildHTML;
+  document.getElementById('runNow').onclick = () => buildHTML(true);
   document.getElementById('acceptDiff').onclick = acceptDiff;
   document.getElementById('rejectDiff').onclick = rejectDiff;
 
@@ -866,12 +1085,29 @@ function refreshProjects() {
     localStorage.setItem('indy-auto-run', JSON.stringify(autoRunEnabled));
   };
 
+  // Auto-suggest toggle persistence
+  document.getElementById('autoSuggestToggle').onclick = () => {
+    autoSuggestEnabled = autoSuggestCheck.checked;
+    localStorage.setItem('indy-auto-suggest', JSON.stringify(autoSuggestEnabled));
+    if (!autoSuggestEnabled) hideSuggestionDropdown();
+  };
+
   // Indy toggle persistence
   indyToggle.addEventListener('click', () => {
     indyEl.classList.toggle('collapsed');
     indyCollapsed = indyEl.classList.contains('collapsed');
     localStorage.setItem('indy-collapsed', JSON.stringify(indyCollapsed));
+    adjustDiffControls();
   });
+
+  // show/hide console
+  closeConsoleBtn.onclick = () => { appConsole.style.display = 'none'; };
+  clearConsoleBtn.onclick = () => { consoleLog.innerHTML = ''; };
+
+  // Indy thinking indicator
+  function setIndyThinking(on) {
+    indyThinking.style.display = on ? 'inline-block' : 'none';
+  }
 
   // Indy AI chat
   indyInput.addEventListener('keydown', async (e) => {
@@ -882,7 +1118,7 @@ function refreshProjects() {
 
     const userMsg = document.createElement('div');
     userMsg.className = 'msg';
-    userMsg.innerHTML = `<b>You:</b> ${question}`;
+    userMsg.innerHTML = `<b>You:</b> ${escapeHtml(question)}`;
     indyLog.appendChild(userMsg);
     indyLog.scrollTop = indyLog.scrollHeight;
 
@@ -902,8 +1138,14 @@ ${indyHistory.slice(-4).map(m => `${m.role}: ${m.content}`).join('\n')}
 Answer:`;
 
     try {
+      setIndyThinking(true);
+      logConsole('Asking Indy...');
+      // demo fetch - this endpoint in the original file is a simple echo; keep but it's just a placeholder
       const res = await fetch(`https://text.pollinations.ai/${encodeURIComponent(context)}`);
       const answer = await res.text();
+
+      setIndyThinking(false);
+      logConsole('Indy responded');
 
       indyHistory.push({role: 'assistant', content: answer});
 
@@ -917,9 +1159,9 @@ Answer:`;
         const aiMsg = document.createElement('div');
         aiMsg.className = 'msg';
         let msgHTML = '';
-        if (beforeCode) msgHTML += `<b>Indy:</b> ${beforeCode}<br><br>`;
-        msgHTML += `<div class="code-suggestion"><pre>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre><button class="apply-btn" data-code="${encodeURIComponent(code)}">Apply this code</button></div>`;
-        if (afterCode) msgHTML += `<br>${afterCode}`;
+        if (beforeCode) msgHTML += `<b>Indy:</b> ${escapeHtml(beforeCode)}<br><br>`;
+        msgHTML += `<div class="code-suggestion"><pre>${escapeHtml(code)}</pre><button class="apply-btn" data-code="${encodeURIComponent(code)}">Apply this code</button></div>`;
+        if (afterCode) msgHTML += `<br>${escapeHtml(afterCode)}`;
         aiMsg.innerHTML = msgHTML;
         indyLog.appendChild(aiMsg);
 
@@ -930,37 +1172,190 @@ Answer:`;
       } else {
         const aiMsg = document.createElement('div');
         aiMsg.className = 'msg';
-        aiMsg.innerHTML = `<b>Indy:</b> ${answer.replace(/\n/g, '<br>')}`;
+        aiMsg.innerHTML = `<b>Indy:</b> ${escapeHtml(answer).replace(/\n/g, '<br>')}`;
         indyLog.appendChild(aiMsg);
       }
 
       indyLog.scrollTop = indyLog.scrollHeight;
     } catch (err) {
+      setIndyThinking(false);
       const errMsg = document.createElement('div');
       errMsg.className = 'msg';
       errMsg.innerHTML = `<b>Error:</b> Could not reach Indy.`;
       indyLog.appendChild(errMsg);
+      logConsole('Indy error: ' + err.message);
     }
   });
 
-// Initialize
-refreshProjects();
-
-// Restore last open project/file if it exists
-if (currentProject && projects[currentProject]) {
-  // Hide welcome screen immediately
-  welcomeScreen.classList.remove('active');
-  
-  // Then open the project (which will show editor, files, etc.)
-  openProject(currentProject);
-  
-  if (currentFile && projects[currentProject].files[currentFile]) {
-    openFile(currentFile);
+  // Helper escape for innerHTML insertion
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
-} else {
-  // No saved project → ensure welcome screen is visible
-  welcomeScreen.classList.add('active');
-}
+
+  // Autocomplete: very small demo set of suggestions
+  const SUGGESTIONS = [
+    {match: 'func', insert: 'function ', label: 'function — JS'},
+    {match: 'def', insert: 'def ', label: 'def — PY'},
+    {match: 'console', insert: 'console.log();', label: 'console.log'},
+    {match: 'for', insert: 'for (let i = 0; i < ; i++) {\n\n}', label: 'for loop'},
+  ];
+
+  function getCurrentWord() {
+    const selStart = editor.selectionStart;
+    const before = editor.value.slice(0, selStart);
+    const m = before.match(/([a-zA-Z0-9_$]+)$/);
+    return m ? m[1] : '';
+  }
+
+  function handleAutocomplete() {
+    const word = getCurrentWord();
+    if (!word) return hideSuggestionDropdown();
+    const matches = SUGGESTIONS.filter(s => s.match.startsWith(word));
+    if (matches.length === 0) return hideSuggestionDropdown();
+
+    // compute editor caret position for dropdown placement (simple approximation)
+    const rect = editor.getBoundingClientRect();
+    // naive row/col calc
+    const linesBefore = editor.value.slice(0, editor.selectionStart).split('\n');
+    const row = linesBefore.length;
+    const col = linesBefore[linesBefore.length - 1].length;
+    // compute position
+    const lineHeight = 18;
+    const top = rect.top + (row - 1) * lineHeight - editor.scrollTop + 52; // account for top bar
+    const left = rect.left + col * 7 + 50; // approximate char width + gutter offset
+
+    suggestionDropdown.innerHTML = '';
+    matches.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'suggestion-item';
+      div.textContent = m.insert;
+      div.title = m.label;
+      div.onclick = () => { applySuggestion(m.insert); hideSuggestionDropdown(); };
+      suggestionDropdown.appendChild(div);
+    });
+
+    suggestionDropdown.style.top = (top) + 'px';
+    suggestionDropdown.style.left = (left) + 'px';
+    suggestionDropdown.style.display = 'block';
+  }
+
+  function applySuggestion(text) {
+    const start = editor.selectionStart;
+    const before = editor.value.slice(0, start);
+    // remove current token
+    const m = before.match(/([a-zA-Z0-9_$]+)$/);
+    const tokenStart = m ? start - m[1].length : start;
+    editor.value = editor.value.slice(0, tokenStart) + text + editor.value.slice(editor.selectionEnd);
+    editor.selectionStart = editor.selectionEnd = tokenStart + text.length;
+    updateLines();
+    updateHighlight();
+    editor.focus();
+  }
+
+  function hideSuggestionDropdown() {
+    suggestionDropdown.style.display = 'none';
+  }
+
+  // Tutorial steps
+  const tutorialSteps = [
+    {
+      title: 'Welcome',
+      text: 'Welcome to Indy Studio! This quick tutorial will point out a few important features.',
+      arrow: null
+    },
+    {
+      title: 'Ask Indy',
+      text: 'You can ask Indy questions about your code. Click the INDY AI toggle on the right to open it.',
+      arrow: () => {
+        const t = document.getElementById('indyToggle');
+        const r = t.getBoundingClientRect();
+        return { top: r.top + 'px', left: (r.left - 200) + 'px', rotate: 0 };
+      },
+      highlight: '#indyToggle'
+    },
+    {
+      title: 'Save before Run',
+      text: 'Always save your code before running. If you try to Run with unsaved changes, Indy Studio will prompt you to Save & Run.',
+      arrow: () => {
+        const t = document.getElementById('save');
+        const r = t.getBoundingClientRect();
+        return { top: (r.top + 40) + 'px', left: (r.left - 20) + 'px', rotate: 0 };
+      },
+      highlight: '#save'
+    },
+    {
+      title: 'Auto Suggestions',
+      text: 'Auto code suggestions can help you type faster. You can toggle them in the Run ▾ menu under "Auto Suggestions". You can turn them off anytime.',
+      arrow: null
+    },
+  ];
+  let tutorialIndex = 0;
+
+  function showTutorial(startIndex=0) {
+    tutorialIndex = startIndex;
+    tutorialOverlay.classList.add('active');
+    renderTutorialStep();
+  }
+
+  function renderTutorialStep() {
+    const s = tutorialSteps[tutorialIndex];
+    tutorialTitle.textContent = s.title;
+    tutorialText.textContent = s.text;
+    // position arrow if provided
+    if (s.arrow) {
+      const pos = s.arrow();
+      tutorialArrow.style.display = 'block';
+      tutorialArrow.style.top = pos.top;
+      tutorialArrow.style.left = pos.left;
+    } else {
+      tutorialArrow.style.display = 'none';
+    }
+    // position panel to center-left by default
+    tutorialStep.style.marginTop = '80px';
+  }
+
+  tutorialPrev.onclick = () => { tutorialIndex = Math.max(0, tutorialIndex - 1); renderTutorialStep(); };
+  tutorialNext.onclick = () => { tutorialIndex = Math.min(tutorialSteps.length - 1, tutorialIndex + 1); renderTutorialStep(); };
+  tutorialEnd.onclick = () => { tutorialOverlay.classList.remove('active'); localStorage.setItem('indy-tutorial-shown', 'true'); };
+
+  document.getElementById('showTutorial').onclick = () => showTutorial(0);
+
+  // small helper to run tutorial on first launch
+  if (!localStorage.getItem('indy-tutorial-shown')) {
+    // show tutorial after short delay
+    setTimeout(() => showTutorial(0), 800);
+  }
+
+  // Persist and restore differences panel position on Indy toggle
+  // already handled by MutationObserver
+
+  // simple console events: listen to messages from iframe (if any)
+  window.addEventListener('message', (ev) => {
+    // in a real app you'd validate origin; here we'll just log
+    logConsole('Frame: ' + (typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data)));
+  });
+
+  // Quick handlers
+  document.getElementById('pyMaker').onclick = () => document.getElementById('makePy').click();
+
+  // Initialize
+  refreshProjects();
+
+  // Restore last open project/file if it exists
+  if (currentProject && projects[currentProject]) {
+    // Hide welcome screen immediately
+    welcomeScreen.classList.remove('active');
+    
+    // Then open the project (which will show editor, files, etc.)
+    openProject(currentProject);
+    
+    if (currentFile && projects[currentProject].files[currentFile]) {
+      openFile(currentFile);
+    }
+  } else {
+    // No saved project → ensure welcome screen is visible
+    welcomeScreen.classList.add('active');
+  }
 </script>
 </body>
 </html>
